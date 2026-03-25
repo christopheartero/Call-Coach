@@ -51,61 +51,114 @@ function deleteEntry(id) {
 }
 
 // ─── PROMPTS ───────────────────────────────────────────────────────────────
-const PROMPT_RNW = `Tu es un expert senior en coaching commercial specialise dans les calls de renouvellement et upsell B2B pour Mariages.net.
+const PROMPT_RNW = `Tu es un expert senior en coaching commercial, specialise dans les calls de renouvellement B2B pour des plateformes de visibilite prestataires mariage (Mariages.net / The Knot Worldwide).
 
-Analyse la transcription et retourne UNIQUEMENT un JSON valide, sans texte avant ou apres.
+CONTEXTE METIER OBLIGATOIRE :
+- Les clients sont des prestataires de mariage abonnes a Mariages.net
+- CATEGORIES PRESTATAIRES MARIAGES.NET (identifier parmi cette liste exacte, ou 'Autre' si inconnu) : Accessoires marié, Accessoires mariage, Animation mariage, Bijoux mariage, Bus mariage, Cadeaux invités mariage, Chapiteaux, Costumes mariage, Décoration mariage, Esthétique coiffure mariage, Faire part mariage, Fleurs mariage, Food Truck, Liste de mariage, Lune de miel, Musique mariage, Officiant, Organisation, Photo mariage, Robes de mariées, Robe cocktail, Soins beauté, Vidéo mariage, Vin et Spiritueux, Voiture mariage, Wedding cake
+- Ils paient un abonnement annuel de visibilite pour generer des leads et des demandes de mariage
+- La valeur est evaluee sur : leads recus, demandes directes, RDV, devis envoyes, mariages signes, ROI global
+- Objections frequentes : baisse de trafic, leads non qualifies, hausse tarifaire, ROI percu insuffisant, comparaison annee precedente, probleme multifiche
+- Un client peut etre objectivement rentable mais subjectivement decu - donc a risque si le call est mal mene
+- Philosophie : ROI recontextualise > concession prix. On ne cede sur le tarif que si le dossier est genuinement fragile
+- Le goodwill (remise, geste commercial) est toujours un DERNIER recours, jamais un premier reflexe
 
 CRITERES D EVALUATION :
-1. Decouverte - BIEN: questions ouvertes, quantification, lecture economique. MAL: bilan superficiel, abandon quantification.
-2. Valeur - BIEN: relier resultats au benefice, ROI personnalise, ancrer valeur AVANT le prix. MAL: pitch generique, ignorer preuves.
-3. Objections (CRITIQUE) - BIEN: laisser formuler entierement, defendre valeur AVANT compensation, goodwill en dernier recours. MAL: compenser AVANT que objection soit posee. TIMING: compenser trop tot = affaiblir valeur percue.
-4. Closing - BIEN: securisation verbale explicite, next step date. MAL: fin de call floue.
-5. Posture - BIEN: chaleureux ET assure, leadership sur le prix. MAL: posture defensive, exces de validation.
+1. Decouverte & Diagnostic - BIEN: questions ouvertes, quantification precise des resultats, lecture economique du dossier, distinction perception vs realite des chiffres. MAL: bilan superficiel, abandon de la quantification, accepter la perception client sans creuser les faits.
+2. Construction de Valeur - BIEN: relier les resultats concrets au benefice business du prestataire, ROI personnalise au profil (photographe vs traiteur vs lieu), ancrer la valeur AVANT le prix, utiliser les donnees du dossier. MAL: pitch generique, ignorer les preuves, parler tarif avant valeur.
+3. Gestion des Objections (CRITIQUE) - BIEN: laisser formuler entierement, reformuler pour valider, defendre la valeur avec des faits AVANT toute compensation, geste commercial en dernier recours. MAL: compenser avant que l objection soit posee, ceder immediatement, sur-valider la frustration.
+4. Closing & Next Steps - BIEN: securisation verbale explicite, next step date et concret, ne jamais laisser le call dans le flou. MAL: fin ambigue, "vous reflechissez", pas de date.
+5. Posture & Relation - BIEN: chaleureux ET assure, leadership sur le prix, reconnaitre les frustrations sans les amplifier. MAL: posture defensive, exces de validation, s excuser du tarif.
 
 JSON ATTENDU:
-{"commercial":"prenom","type_call":"renouvellement","resume":"2-3 phrases","enjeu_reel":"vrai enjeu","rapport_de_force":"qui controlait","probabilite_renouvellement":"% + justification","scores":{"decouverte":{"note":0,"positif":"","amelioration":"","exemple":""},"valeur":{"note":0,"positif":"","amelioration":"","exemple":""},"objections":{"note":0,"positif":"","amelioration":"","exemple":""},"closing":{"note":0,"positif":"","amelioration":"","exemple":""},"posture":{"note":0,"positif":"","amelioration":"","exemple":""}},"opportunites_manquees":["moment 1","moment 2","moment 3"],"reformulations":[{"situation":"","dit":"","aurait_du_dire":""},{"situation":"","dit":"","aurait_du_dire":""},{"situation":"","dit":"","aurait_du_dire":""}],"top3_coaching":["priorite 1","priorite 2","priorite 3"],"a_surveiller":"","verdict":""}
+{"commercial":"prenom","type_call":"renouvellement","categorie_prestataire":"categorie exacte identifiee parmi la liste Mariages.net, ou Autre","nom_client":"nom identifie ou Inconnu","resume":"2-3 phrases","enjeu_reel":"vrai enjeu commercial et relationnel","rapport_de_force":"qui controlait le call et pourquoi","resultat_call":"Signe ou En reflexion ou Refuse ou Inconnu","probabilite_renouvellement":"% + justification","scores":{"decouverte":{"note":0,"positif":"","amelioration":"","exemple":""},"valeur":{"note":0,"positif":"","amelioration":"","exemple":""},"objections":{"note":0,"positif":"","amelioration":"","exemple":""},"closing":{"note":0,"positif":"","amelioration":"","exemple":""},"posture":{"note":0,"positif":"","amelioration":"","exemple":""}},"objections_identifiees":[{"objection":"","type":"Explicite ou Implicite","reponse_commerciale":"","evaluation":"","mieux_faire":""}],"opportunites_manquees":["moment 1","moment 2","moment 3"],"reformulations":[{"situation":"","dit":"","aurait_du_dire":""},{"situation":"","dit":"","aurait_du_dire":""},{"situation":"","dit":"","aurait_du_dire":""}],"top3_coaching":["priorite 1","priorite 2","priorite 3"],"a_surveiller":"","verdict":""}
 
 CALIBRAGE DES NOTES - OBLIGATOIRE :
-1-3 = Execution tres insuffisante, erreurs majeures.
+1-3 = Execution tres insuffisante, erreurs majeures qui nuisent a la retention.
 4-5 = En dessous des attentes, axes critiques non maitrises.
-6-7 = Niveau correct avec lacunes notables.
-8-9 = Au-dessus des attentes, maitrise solide.
+6-7 = Niveau correct avec lacunes notables (6 = call sans erreur majeure).
+8-9 = Au-dessus des attentes, maitrise solide adaptee au profil client.
 10 = Excellence rare.
-REGLES : Ne pas sur-noter - un call sans erreur majeure = 6 pas 8. La note 8+ doit etre meritee. Le RESULTAT FINAL (renouvellement signe, engagement concret) pese dans closing et posture. La moyenne reflète la qualite globale reelle.`;
+REGLES : Ne pas sur-noter. Le RESULTAT FINAL pese lourd dans closing et posture. Un call aimable qui ne securise pas = 5 max en closing.`
 
-const PROMPT_AM = `Tu es un expert en Account Management et Customer Success B2B.
+const PROMPT_AM = `Tu es un expert en Account Management et Customer Success B2B, specialise dans la prevention du churn pour des plateformes de visibilite prestataires mariage.
 
-Contexte: Manager chez Mariages.net (visibilite pour prestataires mariage). Call de suivi de service, pas un closing.
+CONTEXTE METIER OBLIGATOIRE :
+- Clients = prestataires de mariage abonnes a Mariages.net
+- CATEGORIES PRESTATAIRES MARIAGES.NET (identifier parmi cette liste exacte, ou 'Autre' si inconnu) : Accessoires marié, Accessoires mariage, Animation mariage, Bijoux mariage, Bus mariage, Cadeaux invités mariage, Chapiteaux, Costumes mariage, Décoration mariage, Esthétique coiffure mariage, Faire part mariage, Fleurs mariage, Food Truck, Liste de mariage, Lune de miel, Musique mariage, Officiant, Organisation, Photo mariage, Robes de mariées, Robe cocktail, Soins beauté, Vidéo mariage, Vin et Spiritueux, Voiture mariage, Wedding cake
+- Call de suivi en cours de contrat - objectif : maintenir la relation, detecter les signaux faibles, preparer le terrain du renouvellement
+- Le churn est souvent annonce implicitement avant d etre exprime - lire entre les lignes
+- Un client "poli mais distant" est souvent plus a risque qu un client qui se plaint ouvertement
+- Philosophie : ROI recontextualise > concession prix. Detecter les frustrations implicites est aussi important que les explicites
 
-Retourne UNIQUEMENT un JSON valide, sans texte avant ou apres.
+CRITERES D EVALUATION :
+1. Decouverte - BIEN: explorer le business actuel (volume mariages, saisonnalite, canaux utilises, concurrents), pas juste "comment ca va". MAL: call de politesse sans contenu, questions fermees.
+2. Diagnostic Business - BIEN: comprendre la situation economique reelle, si Mariages.net represente une part significative du CA, evaluer la dependance ou l independance a la plateforme. MAL: rester en surface, ne pas quantifier.
+3. Detection des Risques (CRITIQUE) - BIEN: reperer les signaux verbaux de churn (conditionnels, minimisation, comparaison concurrents, hesitation sur valeur), les nommer et les adresser. MAL: ignorer les signaux, clore sans avoir traite les points de friction.
+4. Creation de Valeur - BIEN: rappeler des resultats concrets, aider le client a voir la valeur qu il ne percoit pas toujours, repositionner Mariages.net dans son ecosysteme. MAL: call sans apport concret.
+5. Preparation Renouvellement - BIEN: planter des graines pour le renouvellement sans vendre, identifier les objections potentielles, renforcer le lien humain. MAL: ignorer la dimension renouvellement, laisser la relation froide.
 
 JSON ATTENDU:
-{"commercial":"prenom","type_call":"suivi","resume":"5-8 lignes","niveau_qualite":"Rassurant ou Neutre ou Preoccupant ou Tres preoccupant","risque_churn":"Faible ou Modere ou Eleve + justification","probabilite_renouvellement":"% + justification","situation_client":{"activite":"","satisfaction_globale":"","resultats_mariagesnet":"","autres_sources":"","dependance":"","attentes_implicites":""},"scores":{"decouverte":{"note":0,"positif":"","amelioration":"","exemple":""},"diagnostic_business":{"note":0,"positif":"","amelioration":"","exemple":""},"detection_risques":{"note":0,"positif":"","amelioration":"","exemple":""},"creation_valeur":{"note":0,"positif":"","amelioration":"","exemple":""},"preparation_renouvellement":{"note":0,"positif":"","amelioration":"","exemple":""}},"signaux":{"positifs":["s1","s2"],"vigilance":["v1"],"churn":[]},"opportunites_manquees":["m1","m2","m3"],"reformulations":[{"situation":"","dit":"","aurait_du_dire":""},{"situation":"","dit":"","aurait_du_dire":""},{"situation":"","dit":"","aurait_du_dire":""}],"top3_questions_manquantes":["q1","q2","q3"],"top3_coaching":["p1","p2","p3"],"prochaine_action":"","a_surveiller":"","verdict":""}
+{"commercial":"prenom","type_call":"suivi","categorie_prestataire":"categorie exacte identifiee parmi la liste Mariages.net, ou Autre","nom_client":"nom identifie ou Inconnu","resume":"5-8 lignes","niveau_qualite":"Rassurant ou Neutre ou Preoccupant ou Tres preoccupant","risque_churn":"Faible ou Modere ou Eleve + justification","probabilite_renouvellement":"% + justification","situation_client":{"activite":"","satisfaction_globale":"","resultats_mariagesnet":"","autres_sources":"","dependance":"","attentes_implicites":"","frustrations_detectees":""},"scores":{"decouverte":{"note":0,"positif":"","amelioration":"","exemple":""},"diagnostic_business":{"note":0,"positif":"","amelioration":"","exemple":""},"detection_risques":{"note":0,"positif":"","amelioration":"","exemple":""},"creation_valeur":{"note":0,"positif":"","amelioration":"","exemple":""},"preparation_renouvellement":{"note":0,"positif":"","amelioration":"","exemple":""}},"signaux":{"positifs":["s1"],"vigilance":["v1"],"churn":[]},"opportunites_manquees":["m1","m2","m3"],"reformulations":[{"situation":"","dit":"","aurait_du_dire":""},{"situation":"","dit":"","aurait_du_dire":""},{"situation":"","dit":"","aurait_du_dire":""}],"top3_questions_manquantes":["q1","q2","q3"],"top3_coaching":["p1","p2","p3"],"prochaine_action":"","a_surveiller":"","verdict":""}
 
 CALIBRAGE DES NOTES - OBLIGATOIRE :
-1-3 = Execution tres insuffisante, call sans valeur.
-4-5 = En dessous des attentes, signaux manques, objectifs non atteints.
-6-7 = Niveau correct mais superficiel.
-8-9 = Suivi de qualite, diagnostic business reel.
+1-3 = Call sans valeur, client sort plus froid.
+4-5 = En dessous des attentes, signaux manques.
+6-7 = Correct mais superficiel, relation maintenue sans etre renforcee.
+8-9 = Diagnostic business reel, client repart confiant.
 10 = Excellence rare.
-REGLES : Ne pas sur-noter. Un call aimable mais superficiel = 5 max sur diagnostic et detection risques. La PROFONDEUR du diagnostic et la DETECTION DE RISQUES sont les criteres les plus discriminants. La moyenne reflète la qualite reelle du call.`;
+REGLES : Un call aimable mais superficiel = 5 max sur diagnostic et detection risques. La PROFONDEUR du diagnostic et la DETECTION DES SIGNAUX FAIBLES sont les criteres les plus discriminants.`
 
-const PROMPT_NB = `Tu es un expert en Sales Performance specialise en prospection B2B, discovery, gestion d objections, creation de valeur, closing et analyse de calls commerciaux.
+const PROMPT_NB = `Tu es un expert en Sales Performance, specialise en prospection B2B, discovery et closing pour des plateformes de visibilite prestataires mariage.
 
-Contexte : Je suis manager d une equipe New Business chez Mariages.net (plateforme de visibilite pour prestataires mariage). Mon commercial echange avec un prospect dans le cadre d un appel de vente.
+CONTEXTE METIER OBLIGATOIRE :
+- Le prospect est un prestataire de mariage pas encore client Mariages.net
+- CATEGORIES PRESTATAIRES MARIAGES.NET (identifier parmi cette liste exacte, ou 'Autre' si inconnu) : Accessoires marié, Accessoires mariage, Animation mariage, Bijoux mariage, Bus mariage, Cadeaux invités mariage, Chapiteaux, Costumes mariage, Décoration mariage, Esthétique coiffure mariage, Faire part mariage, Fleurs mariage, Food Truck, Liste de mariage, Lune de miel, Musique mariage, Officiant, Organisation, Photo mariage, Robes de mariées, Robe cocktail, Soins beauté, Vidéo mariage, Vin et Spiritueux, Voiture mariage, Wedding cake
+- Mariages.net vend des abonnements annuels de visibilite pour generer des leads et demandes directes
+- Niveaux d offre : gold, silver, premium, advanced
+- Objections frequentes : "j ai deja assez de clients", "je ne connais pas Mariages.net", "trop cher", "j utilise Instagram/Google/bouche-a-oreille"
+- La valeur se demontre par le ROI potentiel adapte au profil du prestataire
+- Adapter le pitch au type : photographe = leads qualifies, traiteur = volume, lieu = mariages signes
 
-L objectif du call peut etre : decrocher un RDV qualifie, comprendre le besoin, creer de l interet, defendre la valeur, traiter les objections, faire avancer le prospect dans le funnel, ou obtenir un closing.
-
-Retourne UNIQUEMENT un JSON valide, sans texte avant ou apres.
+CRITERES D EVALUATION :
+1. Qualification - BIEN: identifier budget, maturite, decideur, volume de mariages actuel, canaux utilises. MAL: passer au pitch sans qualifier.
+2. Decouverte des besoins - BIEN: questions ouvertes sur les douleurs (manque de visibilite, saisonnalite, dependance a un seul canal), objectifs de croissance. MAL: monologue, ne pas ecouter.
+3. Pitch adapte au profil - BIEN: adapter au type de prestataire avec ROI concret et exemples de profils similaires. MAL: pitch generique identique pour tous.
+4. Gestion des Objections - BIEN: reformuler, traiter avec preuves et cas concrets, ne pas capituler ni sur-promettre. MAL: ceder immediatement, promettre l impossible.
+5. Next Steps & Urgence - BIEN: prochain RDV date, engagement clair, sens de l opportunite sans pression artificielle. MAL: fin floue, pas de date.
 
 JSON ATTENDU :
-{"commercial":"prenom","type_call":"nb","resume_executif":{"resume":"5-10 lignes max","objectif_reel_call":"quel etait le vrai objectif","issue_call":"ce qui s est passe en fin de call","interet_prospect":"Faible ou Moyen ou Eleve","maturite_prospect":"Faible ou Moyen ou Eleve","probabilite_avancement":"% + justification courte","risque_perte":"Faible ou Modere ou Eleve + justification"},"analyse_strategique":{"objectif_commercial_vendeur":"ce que le commercial cherchait a accomplir","objectif_explicite_prospect":"ce que le prospect a exprime vouloir","objectif_implicite_prospect":"ce que le prospect voulait vraiment sans le dire","maturite_bien_identifiee":"oui ou non + explication","call_adapte_funnel":"oui ou non + explication","opportunite_avancee":"oui ou non + explication","virage_call":"moment ou le call a bascule positivement ou negativement","virages_psychologiques":"evolutions du prospect pendant le call"},"structure_call":{"ouverture":{"note":0,"bien":"","mal":"","manque":""},"cadrage":{"note":0,"bien":"","mal":"","manque":""},"decouverte":{"note":0,"bien":"","mal":"","manque":""},"argumentation":{"note":0,"bien":"","mal":"","manque":""},"objections":{"note":0,"bien":"","mal":"","manque":""},"closing":{"note":0,"bien":"","mal":"","manque":""}},"qualite_decouverte":{"niveau":"Superficielle ou Correcte ou Approfondie","explication":"pourquoi ce niveau","elements_identifies":["element 1","element 2"],"elements_manquants":["element manquant 1","element manquant 2"]},"spin":{"situation":"ce que le commercial a appris sur le prospect","problem":"quels problemes ont ete identifies","implication":"le commercial a-t-il creuse les consequences business ? comment ?","need_payoff":"le commercial a-t-il aide le prospect a verbaliser la valeur d une solution ?","verdict_spin":"reste trop en surface ou creuse vraiment ? pourquoi ?"},"argumentation_valeur":{"vend_fonctionnalites_ou_valeur":"fonctionnalites ou valeur avec exemple","adaptation_profil":"adapte ou generique avec exemple","lien_enjeux_prospect":"bien relie ou non","creation_projection":"oui ou non avec exemple","defense_valeur_plateforme":"solide ou insuffisante avec exemple"},"objections":[{"objection":"citation exacte","type":"Explicite ou Implicite","signification_reelle":"ce qu elle revele","reponse_commerciale":"ce que le commercial a dit","evaluation":"note sur 5","mieux_faire":"ce qu il aurait du dire"}],"gestion_prix":{"moment_annonce":"quand le prix est arrive dans le call","terrain_prepare":"oui ou non + comment","valeur_avant_prix":"oui ou non + exemple","prix_assume_ou_subi":"assume ou subi avec exemple","perception_roi_prospect":"le prospect percoit-il le ROI ?"},"scores":{"qualification":{"note":0,"positif":"","amelioration":"","exemple":""},"decouverte_besoins":{"note":0,"positif":"","amelioration":"","exemple":""},"pitch":{"note":0,"positif":"","amelioration":"","exemple":""},"objections":{"note":0,"positif":"","amelioration":"","exemple":""},"next_steps_urgence":{"note":0,"positif":"","amelioration":"","exemple":""}},"opportunites_manquees":["moment 1 avec ce qui aurait du etre fait","moment 2","moment 3"],"reformulations":[{"situation":"","dit":"","aurait_du_dire":""}],"top3_coaching":["priorite 1 concrete et actionnable","priorite 2","priorite 3"],"a_surveiller":"","verdict":"message direct au commercial"}
+{"commercial":"prenom","type_call":"nb","categorie_prestataire":"categorie exacte identifiee ou supposee parmi la liste Mariages.net, ou Autre","nom_prospect":"nom identifie ou Inconnu","resume_executif":{"resume":"5-10 lignes","objectif_reel_call":"","issue_call":"","interet_prospect":"Faible ou Moyen ou Eleve","maturite_prospect":"Faible ou Moyen ou Eleve","probabilite_avancement":"% + justification","risque_perte":"Faible ou Modere ou Eleve + justification"},"analyse_strategique":{"objectif_commercial_vendeur":"","objectif_explicite_prospect":"","objectif_implicite_prospect":"","maturite_bien_identifiee":"oui ou non + explication","call_adapte_funnel":"oui ou non + explication","opportunite_avancee":"oui ou non + explication","virage_call":"","virages_psychologiques":""},"structure_call":{"ouverture":{"note":0,"bien":"","mal":"","manque":""},"cadrage":{"note":0,"bien":"","mal":"","manque":""},"decouverte":{"note":0,"bien":"","mal":"","manque":""},"argumentation":{"note":0,"bien":"","mal":"","manque":""},"objections":{"note":0,"bien":"","mal":"","manque":""},"closing":{"note":0,"bien":"","mal":"","manque":""}},"qualite_decouverte":{"niveau":"Superficielle ou Correcte ou Approfondie","explication":"","elements_identifies":[""],"elements_manquants":[""]},"spin":{"situation":"","problem":"","implication":"","need_payoff":"","verdict_spin":""},"argumentation_valeur":{"adapte_profil_prestataire":"oui ou non + comment","vend_roi_ou_fonctionnalites":"","lien_enjeux_prospect":"","defense_valeur_plateforme":""},"objections":[{"objection":"","type":"Explicite ou Implicite","signification_reelle":"","reponse_commerciale":"","evaluation":"note sur 5","mieux_faire":""}],"gestion_prix":{"moment_annonce":"","terrain_prepare":"","valeur_avant_prix":"","prix_assume_ou_subi":"","perception_roi_prospect":""},"scores":{"qualification":{"note":0,"positif":"","amelioration":"","exemple":""},"decouverte_besoins":{"note":0,"positif":"","amelioration":"","exemple":""},"pitch":{"note":0,"positif":"","amelioration":"","exemple":""},"objections":{"note":0,"positif":"","amelioration":"","exemple":""},"next_steps_urgence":{"note":0,"positif":"","amelioration":"","exemple":""}},"opportunites_manquees":[""],"reformulations":[{"situation":"","dit":"","aurait_du_dire":""}],"top3_coaching":["","",""],"a_surveiller":"","verdict":""}
 
-CALIBRAGE DES NOTES (structure_call et scores) - OBLIGATOIRE :
-1-3 = Execution tres insuffisante. 4-5 = En dessous des attentes. 6-7 = Correct avec lacunes. 8-9 = Solide. 10 = Excellence rare.
-Ne pas sur-noter. Un call sans erreur majeure = 6. Le RESULTAT FINAL (avancement dans le funnel, engagement obtenu) pese dans les notes closing et next_steps.`;
+CALIBRAGE DES NOTES - OBLIGATOIRE :
+1-3 = Execution insuffisante. 4-5 = En dessous des attentes. 6-7 = Correct avec lacunes. 8-9 = Solide. 10 = Excellence rare.
+Ne pas sur-noter. Le RESULTAT FINAL (engagement obtenu, avancement dans le funnel) pese dans closing et next_steps.`
 
-const PROMPT_WB = `Tu es un expert en Sales Performance specialise en retention, reconquete client, winback, gestion d objections et analyse de calls B2B.
+const PROMPT_WB = `Tu es un expert en reconquete client, specialise dans les calls winback pour des plateformes de visibilite prestataires mariage.
+
+CONTEXTE METIER OBLIGATOIRE :
+- Le prospect est un ANCIEN CLIENT Mariages.net ayant resilie il y a moins de 6 mois
+- CATEGORIES PRESTATAIRES MARIAGES.NET (identifier parmi cette liste exacte, ou 'Autre' si inconnu) : Accessoires marié, Accessoires mariage, Animation mariage, Bijoux mariage, Bus mariage, Cadeaux invités mariage, Chapiteaux, Costumes mariage, Décoration mariage, Esthétique coiffure mariage, Faire part mariage, Fleurs mariage, Food Truck, Liste de mariage, Lune de miel, Musique mariage, Officiant, Organisation, Photo mariage, Robes de mariées, Robe cocktail, Soins beauté, Vidéo mariage, Vin et Spiritueux, Voiture mariage, Wedding cake
+- Il connait deja la plateforme et porte un historique emotionnel et commercial fort
+- Un winback ne se traite PAS comme un call New Business - l historique est le pivot de tout
+- Raisons de resiliation les plus frequentes : deception sur les leads, ROI percu insuffisant, hausse tarifaire, mauvaise experience relation, concurrent moins cher, changement de strategie du prestataire
+- La confiance est brisee - elle doit etre reconstruite AVANT de parler de re-signature
+- Philosophie : comprendre d abord, reconstruire ensuite, proposer en dernier - jamais l inverse
+- Re-signer via le prix seul sans reconstruction de valeur = erreur grave qui ne tient pas
+
+CRITERES D EVALUATION :
+1. Diagnostic du depart - BIEN: poser la question directement, ecouter sans se defendre, identifier la vraie raison (pas juste l excuse de surface). MAL: eviter le sujet, minimiser, se justifier immediatement.
+2. Gestion du passe & confiance - BIEN: reconnaitre les faits sans exces de culpabilite, montrer ce qui a change, valider les frustrations sans les amplifier. MAL: nier, promettre sans preuves, etre defensif.
+3. Offre adaptee - BIEN: proposer quelque chose de tangiblement different du contrat precedent. MAL: meme chose qu avant, remise pure sans changement de valeur.
+4. Objections liees au passe - BIEN: distinguer objection rationnelle vs emotionnelle, traiter avec preuves concretes. MAL: esquiver, sur-promettre, capituler.
+5. Closing & Next Steps - BIEN: engagement clair, next step date, ne pas partir sans suite concrete. MAL: fin floue, laisser le prospect seul dans le vide.
+
+JSON ATTENDU :
+{"commercial":"prenom","type_call":"winback","categorie_prestataire":"categorie exacte identifiee parmi la liste Mariages.net, ou Autre","nom_client":"nom identifie ou Inconnu","resume_executif":{"resume":"5-10 lignes","enjeu_reel":"","issue_call":"","ouverture_retour":"Faible ou Moyen ou Eleve","niveau_resistance":"Faible ou Moyen ou Eleve","probabilite_resignature":"% + justification","risque_echec":"Faible ou Modere ou Eleve + justification"},"analyse_strategique":{"objectif_commercial_vendeur":"","winback_vs_nb_bien_compris":"oui ou non + explication","historique_pris_en_compte":"oui ou non + comment","motif_depart_identifie":"","motif_profond":"","espace_confiance_reouvert":"oui ou non + comment","virage_call":"","virages_psychologiques":""},"structure_call":{"prise_contact":{"note":0,"bien":"","mal":"","manque":""},"reouverture_relation":{"note":0,"bien":"","mal":"","manque":""},"exploration_historique":{"note":0,"bien":"","mal":"","manque":""},"reevaluation_contexte":{"note":0,"bien":"","mal":"","manque":""},"reconstruction_valeur":{"note":0,"bien":"","mal":"","manque":""},"traitement_objections":{"note":0,"bien":"","mal":"","manque":""},"closing":{"note":0,"bien":"","mal":"","manque":""}},"historique_client":{"niveau_exploration":"Insuffisante ou Correcte ou Approfondie","explication":"","raisons_resiliation_identifiees":[""],"irritants_explores":[""],"zones_non_explorees":[""]},"spin_winback":{"situation":"","problem":"","implication":"","need_payoff":"","verdict":""},"reconstruction_valeur":{"repart_experience_passee":"","reconnait_historique":"","recrée_envie":"","angle_nouveau":"","verdict":""},"portrait_client":{"ouverture_retour":"","frustration_residuelle":"Faible ou Moderee ou Forte","niveau_confiance":"Faible ou Moyen ou Fort","sensibilite_prix":"Faible ou Moderee ou Forte","profil_type":"Decu ou Pragmatique ou Mefiant ou Opportuniste ou Encore attache ou Ferme","ce_qu_il_avait_besoin_d_entendre":"","ce_qu_il_ne_fallait_pas_faire":""},"objections":[{"objection":"","type":"Explicite ou Implicite ou Heritee du passe","signification_reelle":"","reponse_commerciale":"","evaluation":"note sur 5","mieux_faire":""}],"gestion_historique_negatif":{"reconnait_ou_esquive":"","minimise_frustrations":"","defend_trop_tot":"","ecoute_avant_repondre":"","verdict":""},"gestion_prix":{"moment_retour_prix":"","valeur_preparee_avant_prix":"","client_raisonne_en":"Cout ou Deception passee ou ROI","discours_tarifaire":"assume ou fragile","retour_via_prix_uniquement":"oui ou non"},"scores":{"diagnostic_depart":{"note":0,"positif":"","amelioration":"","exemple":""},"gestion_passe":{"note":0,"positif":"","amelioration":"","exemple":""},"offre_adaptee":{"note":0,"positif":"","amelioration":"","exemple":""},"objections_passe":{"note":0,"positif":"","amelioration":"","exemple":""},"closing_next_steps":{"note":0,"positif":"","amelioration":"","exemple":""}},"opportunites_manquees":[""],"reformulations":[{"situation":"","dit":"","aurait_du_dire":""}],"call_ideal":{"prise_contact":"","reouverture_relation":"","exploration_depart":"","reconnaissance_historique":"","reconstruction_valeur":"","reponse_objection_cle":"","closing_next_step":""},"top3_coaching":["","",""],"a_surveiller":"","verdict":""}
+
+CALIBRAGE DES NOTES - OBLIGATOIRE :
+1-3 = Aggrave la situation. 4-5 = Chance de reconquete compromise. 6-7 = Bases posees mais incomplete. 8-9 = Reconquete bien engagee. 10 = Excellence rare.
+Ne pas sur-noter. Diagnostic du depart et gestion historique negatif sont les criteres les plus discriminants. Un winback sans closing concret ne depasse pas 7.`Tu es un expert en Sales Performance specialise en retention, reconquete client, winback, gestion d objections et analyse de calls B2B.
 
 Contexte : Je suis manager chez Mariages.net. Mon commercial echange avec un ancien client ayant resilie il y a moins de 6 mois. Le client connait deja la plateforme et porte un historique emotionnel et commercial qui influence fortement l echange.
 
@@ -362,9 +415,9 @@ function App() {
     try {
       const dataStr = calls.map((a,i)=>{
         const avg=weightedScore(a.result.scores,a.callType);
-        return "Call "+(i+1)+" ("+a.date+", "+a.callType+"): score moyen="+avg+"/10, details="+Object.entries(a.result.scores).map(([k,v])=>k+"="+v.note).join(",")+", coaching=["+(a.result.top3_coaching||[]).join("|")+"]";
+        const cat = a.result?.categorie_prestataire||""; const nom = a.result?.nom_client||a.result?.nom_prospect||""; return "Call "+(i+1)+" ("+a.date+", "+a.callType+(cat?", "+cat:"")+(nom?", client: "+nom:"")+", anciennete: "+(a.contrat?.anciennete||"nc")+"): score="+avg+"/10, details="+Object.entries(a.result.scores).map(([k,v])=>k+"="+v.note).join(",")+", coaching=["+(a.result.top3_coaching||[]).join("|")+"], resultat="+(a.result.resultat_call||a.result.resume_executif?.issue_call||"nc")+"]";
       }).join("\n");
-      const prompt = "Tu es expert en coaching commercial. Voici l historique de "+calls.length+" calls de "+amName+".\n\n"+dataStr+"\n\nIdentifie les patterns recurrents. Retourne UNIQUEMENT un JSON valide:\n{\"synthese\":\"profil global en 2-3 phrases\",\"points_forts_recurrents\":[\"pattern 1\",\"pattern 2\"],\"axes_faibles_recurrents\":[\"axe 1\",\"axe 2\"],\"evolution\":\"tendance avec evidence\",\"focus_coaching\":[\"priorite 1 pour les prochaines semaines\",\"priorite 2\"],\"message_manager\":\"message personnalise de coaching base sur les patterns\"}";
+      const prompt = "Tu es expert en coaching commercial specialise dans les renouvellements B2B pour prestataires mariage (Mariages.net). Voici l historique de "+calls.length+" calls de "+amName+" (types: "+[...new Set(calls.map(a=>a.callType))].join(", ")+"). Analyse les patterns par type de call si pertinent. ".\n\n"+dataStr+"\n\nIdentifie les patterns recurrents. Retourne UNIQUEMENT un JSON valide:\n{\"synthese\":\"profil global en 2-3 phrases\",\"points_forts_recurrents\":[\"pattern 1\",\"pattern 2\"],\"axes_faibles_recurrents\":[\"axe 1\",\"axe 2\"],\"evolution\":\"tendance avec evidence\",\"focus_coaching\":[\"priorite 1 pour les prochaines semaines\",\"priorite 2\"],\"message_manager\":\"message personnalise de coaching base sur les patterns\"}";
       const data = await (await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:2000,messages:[{role:"user",content:prompt}]})})).json();
       if(data.error) throw new Error(data.error.message);
       const text=data.content.map(i=>i.text||"").join("");
@@ -578,6 +631,13 @@ function App() {
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20,flexWrap:"wrap",gap:14}}>
               <div>
                 <div style={ss({fontSize:10,color:"#6b6b7e",textTransform:"uppercase",letterSpacing:2,marginBottom:6})}>{result.type_call==="suivi"?"Account Management":result.type_call==="nb"?"New Business":result.type_call==="winback"?"Winback":"Renouvellement"} · {am}</div>
+                {(result.nom_client||result.nom_prospect||result.categorie_prestataire)&&(
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:6}}>
+                    {(result.nom_client||result.nom_prospect)&&<span style={ss({fontSize:12,padding:"3px 10px",borderRadius:20,background:"#1a1208",color:"#e8c97a",border:"1px solid #3a2a10"})}>{result.nom_client||result.nom_prospect}</span>}
+                    {result.categorie_prestataire&&<span style={ss({fontSize:12,padding:"3px 10px",borderRadius:20,background:"#0f1a1a",color:"#4ade80",border:"1px solid #1a3a1a"})}>{result.categorie_prestataire}</span>}
+                    {result.resultat_call&&result.resultat_call!=="Inconnu"&&<span style={ss({fontSize:12,padding:"3px 10px",borderRadius:20,background:result.resultat_call==="Signe"?"#0a1a0a":"#1a0a0a",color:result.resultat_call==="Signe"?"#4ade80":"#f87171",border:"1px solid "+(result.resultat_call==="Signe"?"#1a3a1a":"#3a1a1a")})}>{result.resultat_call}</span>}
+                  </div>
+                )}
                 <div style={pf({fontSize:20,fontWeight:700,marginBottom:8})}>Rapport de coaching</div>
                 <div style={ss({color:"#9a9aae",fontSize:13,maxWidth:440,lineHeight:1.6})}>{result.resume}</div>
               </div>
