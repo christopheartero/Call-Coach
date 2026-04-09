@@ -378,9 +378,9 @@ function App() {
     setLoading(true); setError(null); setResult(null); setEmailTxt("");
     try {
       let messages;
+      const contratCtx = (contratDebut||contratFin||contratValeur||contratAnciennete)?"\n\nCONTEXTE CONTRAT (essentiel pour l analyse) :"+(contratDebut?" Debut contrat: "+contratDebut+".":"")+(contratFin?" Fin contrat: "+contratFin+". Aujourd hui: "+new Date().toLocaleDateString("fr-FR")+".":"")+(contratValeur?" Valeur: "+contratValeur+" "+contratDevise+".":"")+(contratAnciennete?" Anciennete client: "+contratAnciennete+".":""):"";
       if(inputMode==="pdf"){
         setLoadStep("Lecture du PDF...");
-        const contratCtx = (contratDebut||contratFin||contratValeur||contratAnciennete)?"\n\nCONTEXTE CONTRAT (essentiel pour l analyse) :"+(contratDebut?" Debut contrat: "+contratDebut+".":"")+(contratFin?" Fin contrat: "+contratFin+". Aujourd hui: "+new Date().toLocaleDateString("fr-FR")+".":"")+(contratValeur?" Valeur: "+contratValeur+" "+contratDevise+".":"")+(contratAnciennete?" Anciennete client: "+contratAnciennete+".":""):"";
         messages=[{role:"user",content:[{type:"document",source:{type:"base64",media_type:"application/pdf",data:pdfB64}},{type:"text",text:"Analyse cette transcription selon les instructions."+contratCtx}]}];
       } else {
         messages=[{role:"user",content:"Transcription du call :\n\n"+transcript+contratCtx}];
@@ -392,6 +392,7 @@ function App() {
       const a=text.indexOf("{"),b=text.lastIndexOf("}");
       if(a===-1||b===-1) throw new Error("Reponse inattendue.");
       const parsed = JSON.parse(text.slice(a,b+1));
+      parsed.type_call = callType;
       const entry = {id:Date.now(),date:new Date().toLocaleDateString("fr-FR"),am:am||"Neutre",callType,fileName:fileName||"",contrat:{debut:contratDebut,fin:contratFin,valeur:contratValeur,devise:contratDevise,anciennete:contratAnciennete},result:parsed};
       const updated = saveEntry(entry);
       setAnalyses(updated);
