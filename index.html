@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Call Coach — Mariages.net</title>
+<title>Call Coach - Mariages.net</title>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -28,6 +28,7 @@ const { useState, useRef, useEffect } = React;
 
 const AMS = ["Julie","Lauriane","David","Farah","Filipe","Clara","Antoine","Laurine","Anais","Neutre"];
 const STORAGE_KEY = "callcoach_v1";
+const API_STORAGE_KEY = "ccApiKey";
 
 // ─── STORAGE (localStorage) ────────────────────────────────────────────────
 function loadAll() {
@@ -194,11 +195,152 @@ const WEIGHTS_AM  = {detection_risques:0.30,diagnostic_business:0.25,creation_va
 const WEIGHTS_NB  = {qualification:0.20,decouverte_besoins:0.25,pitch:0.20,objections:0.20,next_steps_urgence:0.15};
 const WEIGHTS_WB  = {diagnostic_depart:0.25,gestion_passe:0.20,offre_adaptee:0.15,objections_passe:0.25,closing_next_steps:0.15};
 
-function weightedScore(scores, type) {
-  const weights = type==="suivi"?WEIGHTS_AM:type==="nb"?WEIGHTS_NB:type==="winback"?WEIGHTS_WB:WEIGHTS_RNW;
+const CALL_TYPE_META = {
+  renouvellement: {
+    label:"Renouvellement",
+    managerPromptLabel:"renouvellement",
+    shortLabel:"RNW",
+    dims:DIMS_RNW,
+    weights:WEIGHTS_RNW,
+    prompt:PROMPT_RNW,
+    tabs:[{id:"vue",l:"Vue strategique"},{id:"scores",l:"Scores"},{id:"ref",l:"Reformulations"},{id:"coaching",l:"Coaching"},{id:"email",l:"Email"}],
+  },
+  suivi: {
+    label:"Account Management",
+    managerPromptLabel:"account management",
+    shortLabel:"AM",
+    dims:DIMS_AM,
+    weights:WEIGHTS_AM,
+    prompt:PROMPT_AM,
+    tabs:[{id:"vue",l:"Situation client"},{id:"signaux",l:"Signaux"},{id:"scores",l:"Scores"},{id:"ref",l:"Reformulations"},{id:"coaching",l:"Coaching"},{id:"email",l:"Email"}],
+  },
+  nb: {
+    label:"New Business",
+    managerPromptLabel:"new business",
+    shortLabel:"NB",
+    dims:DIMS_NB,
+    weights:WEIGHTS_NB,
+    prompt:PROMPT_NB,
+    tabs:[{id:"vue",l:"Analyse"},{id:"structure",l:"Structure & SPIN"},{id:"scores",l:"Scores"},{id:"ref",l:"Reformulations"},{id:"coaching",l:"Coaching"},{id:"email",l:"Email"}],
+  },
+  winback: {
+    label:"Winback",
+    managerPromptLabel:"winback",
+    shortLabel:"WB",
+    dims:DIMS_WB,
+    weights:WEIGHTS_WB,
+    prompt:PROMPT_WB,
+    tabs:[{id:"vue",l:"Analyse"},{id:"wb_structure",l:"Structure & SPIN"},{id:"scores",l:"Scores"},{id:"ref",l:"Reformulations"},{id:"coaching",l:"Coaching"},{id:"email",l:"Email"}],
+  },
+};
+
+const NAV_ITEMS = [
+  {s:"home",l:"Analyser"},
+  {s:"history",l:"Historique"},
+  {s:"patterns",l:"Patterns"},
+];
+
+const CALL_TYPE_OPTIONS = [
+  {id:"renouvellement",l:"Renouvellement",sub:"Renouvellement ou upsell"},
+  {id:"suivi",l:"Account Management",sub:"Service call / suivi de compte"},
+  {id:"nb",l:"New Business",sub:"Premier contact / decouverte"},
+  {id:"winback",l:"Winback",sub:"Client perdu depuis moins de 6 mois"},
+];
+
+const INPUT_MODE_OPTIONS = [
+  {id:"pdf",l:"PDF"},
+  {id:"text",l:"Texte"},
+];
+
+const CLIENT_TENURE_OPTIONS = ["Nouveau client","1 an","2 ans","3 ans","4 ans","5 ans et plus"];
+
+function getCallMeta(type) {
+  return CALL_TYPE_META[type] || CALL_TYPE_META.renouvellement;
+}
+
+function getCallLabel(type) {
+  return getCallMeta(type).label;
+}
+
+function getCallShortLabel(type) {
+  return getCallMeta(type).shortLabel;
+}
+
+function getManagerPromptCallLabel(type) {
+  return getCallMeta(type).managerPromptLabel;
+}
+
+function getCallTabs(type) {
+  return getCallMeta(type).tabs;
+}
+
+function getSystemPrompt(type) {
+  return getCallMeta(type).prompt;
+}
+
+function weightedScore(scores = {}, type) {
+  const { weights } = getCallMeta(type);
   let total=0,wSum=0;
   Object.entries(scores).forEach(([k,v])=>{const w=weights[k]||0;total+=(v.note||0)*w;wSum+=w;});
   return wSum>0?Math.round(total/wSum):0;
+}
+
+function resolveCallType(result, fallback) {
+  return result?.type_call || fallback || "renouvellement";
+}
+
+function getResultSummary(result) {
+  return result?.resume || result?.resume_executif?.resume || "";
+}
+
+function getResultOutcome(result) {
+  if (result?.resultat_call && result.resultat_call !== "Inconnu") return result.resultat_call;
+  return result?.resume_executif?.issue_call || "";
+}
+
+function hasAnalysisInput({ inputMode, pdfB64, transcript }) {
+  return inputMode==="pdf" ? !!pdfB64 : !!transcript.trim();
+}
+
+function getAnalyzeButtonState({ inputMode, pdfB64, transcript, loading, hasApiKey }) {
+  const hasInput = hasAnalysisInput({ inputMode, pdfB64, transcript });
+  return {
+    hasInput,
+    disabled: loading || !hasInput || !hasApiKey,
+    label: !hasApiKey ? "Cle API requise" : !hasInput ? "Ajoute un PDF ou du texte" : "Analyser le call",
+  };
+}
+
+function isValidAnalysisEntry(entry) {
+  return Boolean(
+    entry &&
+    typeof entry==="object" &&
+    entry.id &&
+    entry.callType &&
+    entry.result &&
+    typeof entry.result==="object"
+  );
+}
+
+function mergeAnalyses(existing, imported) {
+  if (!Array.isArray(imported)) throw new Error("Format invalide (tableau attendu)");
+  const valid = imported.filter(isValidAnalysisEntry);
+  if (valid.length===0) throw new Error("Aucune analyse valide dans le fichier");
+  const existingIds = new Set(existing.map(a=>a.id));
+  const additions = valid.filter(a=>!existingIds.has(a.id));
+  const merged = [...existing, ...additions].sort((a,b)=>b.id-a.id);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+  return { merged, added: additions.length, validCount: valid.length };
+}
+
+function downloadTextFile({ filename, content, mimeType }) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ─── HELPERS ───────────────────────────────────────────────────────────────
@@ -210,9 +352,10 @@ const pf = o => ({fontFamily:"Georgia,'Times New Roman',serif",...o});
 // ─── EXPORT HTML ──────────────────────────────────────────────────────────
 function generateReportHTML(entry) {
   const r = entry.result;
-  const typeLabel = entry.callType==="suivi"?"Account Management":entry.callType==="nb"?"New Business":entry.callType==="winback"?"Winback":"Renouvellement";
-  const dims = entry.callType==="suivi"?DIMS_AM:entry.callType==="nb"?DIMS_NB:entry.callType==="winback"?DIMS_WB:DIMS_RNW;
-  const ws = weightedScore(r.scores, entry.callType);
+  const callType = resolveCallType(r, entry.callType);
+  const typeLabel = getCallLabel(callType);
+  const dims = getCallMeta(callType).dims;
+  const ws = weightedScore(r.scores, callType);
   const scoreColor = ws>=8?"#4ade80":ws>=6?"#e8c97a":ws>=4?"#fb923c":"#f87171";
 
   const row = (label, val) => !val?"":
@@ -237,7 +380,7 @@ function generateReportHTML(entry) {
 
   const refsHTML = (r.reformulations||[]).map((rf,i)=>`
     <div style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid #f0f0f0">
-      <div style="font-size:11px;font-weight:600;color:#666;margin-bottom:6px">Situation ${i+1} — ${rf.situation}</div>
+      <div style="font-size:11px;font-weight:600;color:#666;margin-bottom:6px">Situation ${i+1} - ${rf.situation}</div>
       <div style="background:#fff5f5;border-left:3px solid #f87171;padding:8px 12px;border-radius:4px;font-size:12px;margin-bottom:8px;color:#555"><span style="font-weight:600;color:#dc2626">Dit :</span> ${rf.dit}</div>
       <div style="background:#f0fdf4;border-left:3px solid #4ade80;padding:8px 12px;border-radius:4px;font-size:12px;color:#555"><span style="font-weight:600;color:#16a34a">Aurait du dire :</span> ${rf.aurait_du_dire}</div>
     </div>`).join("");
@@ -249,7 +392,7 @@ function generateReportHTML(entry) {
     `<div style="display:flex;gap:12px;margin-bottom:12px"><div style="background:#1e3a5f;color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0">${i+1}</div><div style="font-size:13px;line-height:1.6;color:#333">${p}</div></div>`).join("");
 
   return `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
-<title>Rapport — ${entry.am} — ${typeLabel} — ${entry.date}</title>
+<title>Rapport - ${entry.am} - ${typeLabel} - ${entry.date}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:system-ui,sans-serif;background:#f8f8f8;padding:32px 0}
@@ -317,13 +460,63 @@ function App() {
   const [patData, setPatData] = useState(null);
   const [patLoading, setPatLoading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null);
-  const [apiKey, setApiKey] = React.useState(()=>localStorage.getItem("ccApiKey")||"");
+  const [apiKey, setApiKey] = React.useState(()=>localStorage.getItem(API_STORAGE_KEY)||"");
   const [viewingEntry, setViewingEntry] = useState(null);
   const [fromHistory, setFromHistory] = useState(false);
   const [importMsg, setImportMsg] = useState("");
   const fileRef = useRef();
 
   useEffect(() => { setAnalyses(loadAll()); }, []);
+
+  const persistApiKey = (value) => {
+    setApiKey(value);
+    if (value) localStorage.setItem(API_STORAGE_KEY, value);
+    else localStorage.removeItem(API_STORAGE_KEY);
+  };
+
+  const resetContractFields = () => {
+    setContratDebut(""); setContratFin(""); setContratValeur("");
+    setContratDevise("HT"); setContratAnciennete("");
+  };
+
+  const resetInputFields = () => {
+    setPdfB64(null); setFileName(null); setTranscript(""); setInputMode("pdf");
+  };
+
+  const resetCurrentView = () => {
+    setResult(null); setError(null); setEmailTxt(""); setEmailCopied(false);
+    setFromHistory(false); setViewingEntry(null);
+  };
+
+  const flashImportMessage = (message) => {
+    setImportMsg(message);
+    setTimeout(()=>setImportMsg(""), 4000);
+  };
+
+  const exportHistory = () => {
+    downloadTextFile({
+      filename:"callcoach-historique-"+new Date().toLocaleDateString("fr-FR").replace(/\//g,"-")+".json",
+      content:JSON.stringify(analyses, null, 2),
+      mimeType:"application/json",
+    });
+  };
+
+  const handleImportHistory = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const imported = JSON.parse(ev.target.result);
+        const existing = loadAll();
+        const { merged, added } = mergeAnalyses(existing, imported);
+        setAnalyses(merged);
+        flashImportMessage(added+" analyse(s) importee(s). Total : "+merged.length+".");
+      } catch (err) {
+        flashImportMessage("Erreur : "+err.message);
+      }
+    };
+    reader.readAsText(file);
+  };
 
   const onFile = (e) => {
     e.preventDefault();
@@ -337,37 +530,41 @@ function App() {
   };
 
   const goHome = () => {
-    setScreen("home"); setCallType(null); setAm(null); setResult(null);
-    setError(null); setEmailTxt(""); setEmailCopied(false); setPdfB64(null);
-    setFileName(null); setTranscript(""); setInputMode("pdf");
-    setFromHistory(false); setViewingEntry(null);
+    setScreen("home"); setCallType(null); setAm(null);
+    resetCurrentView(); resetInputFields(); resetContractFields();
   };
 
   const exportHTML = () => {
     const entry = viewingEntry || {result,callType,am,date:new Date().toLocaleDateString("fr-FR")};
-    const html = generateReportHTML(entry);
-    const blob = new Blob([html], {type:"text/html;charset=utf-8"});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href=url; a.download="rapport-"+(entry.am||"coaching")+"-"+(entry.date||"").replace(/\//g,"-")+".html";
-    a.click(); URL.revokeObjectURL(url);
+    downloadTextFile({
+      filename:"rapport-"+(entry.am||"coaching")+"-"+(entry.date||"").replace(/\//g,"-")+".html",
+      content:generateReportHTML(entry),
+      mimeType:"text/html;charset=utf-8",
+    });
   };
 
   const genEmail = async (res, amName) => {
+    const trimmedApiKey = apiKey.trim();
+    if (!trimmedApiKey) {
+      setEmailTxt("Ajoute une cle API Anthropic pour generer l email.");
+      return;
+    }
     setEmailLoading(true); setEmailTxt("");
     try {
-      const scores = Object.entries(res.scores).map(([k,v])=>k+"="+v.note).join(",");
+      const scores = Object.entries(res.scores||{}).map(([k,v])=>k+"="+v.note).join(",");
       const top3 = (res.top3_coaching||[]).join(" | ");
       const opps = (res.opportunites_manquees||[]).slice(0,2).join("; ");
       const amPart = amName&&amName!=="Neutre"?"Commercial: "+amName+". ":"";
       const catPart = res.categorie_prestataire?"Categorie prestataire: "+res.categorie_prestataire+". ":"";
       const nomPart = (res.nom_client||res.nom_prospect)?"Nom client: "+(res.nom_client||res.nom_prospect)+". ":"";
-      const resPart = res.resultat_call&&res.resultat_call!=="Inconnu"?"Resultat du call: "+res.resultat_call+". ":"";
+      const summary = getResultSummary(res);
+      const outcome = getResultOutcome(res);
+      const resPart = outcome?"Resultat du call: "+outcome+". ":"";
       const entry = viewingEntry;
       const contratPart = entry?.contrat?.valeur?"Valeur contrat: "+entry.contrat.valeur+" "+entry.contrat.devise+". ":"";
       const ancPart = entry?.contrat?.anciennete?"Anciennete client: "+entry.contrat.anciennete+". ":"";
-      const prompt = "Tu es manager chez Mariages.net. Redige un email de feedback pour un call de "+(res.type_call==="suivi"?"account management":res.type_call==="nb"?"new business":res.type_call==="winback"?"winback":"renouvellement")+". "+amPart+catPart+nomPart+resPart+contratPart+ancPart+"Resume: "+res.resume+". Scores: "+scores+". Top coaching: "+top3+". Opportunites: "+opps+". Verdict: "+res.verdict+". Consignes: 1re personne, naturel, direct, bienveillant, pas corporate, 3-4 paragraphes (positif / a travailler / 1-2 actions concretes), commence directement sans formule de politesse, termine par une phrase courte d encouragement, 150-220 mots max, pas de scores chiffres, en francais, semble redige par un humain.";
-      const data = await (await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:800,messages:[{role:"user",content:prompt}]})})).json();
+      const prompt = "Tu es manager chez Mariages.net. Redige un email de feedback pour un call de "+getManagerPromptCallLabel(res.type_call)+". "+amPart+catPart+nomPart+resPart+contratPart+ancPart+"Resume: "+summary+". Scores: "+scores+". Top coaching: "+top3+". Opportunites: "+opps+". Verdict: "+res.verdict+". Consignes: 1re personne, naturel, direct, bienveillant, pas corporate, 3-4 paragraphes (positif / a travailler / 1-2 actions concretes), commence directement sans formule de politesse, termine par une phrase courte d encouragement, 150-220 mots max, pas de scores chiffres, en francais, semble redige par un humain.";
+      const data = await (await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":trimmedApiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:800,messages:[{role:"user",content:prompt}]})})).json();
       if(data.error) throw new Error(data.error.message);
       setEmailTxt(data.content.map(i=>i.text||"").join("").trim());
     } catch(err){setEmailTxt("Erreur : "+err.message);}
@@ -375,10 +572,15 @@ function App() {
   };
 
   const analyze = async () => {
+    const trimmedApiKey = apiKey.trim();
+    if (!trimmedApiKey) {
+      setError("Ajoute une cle API Anthropic pour lancer l analyse.");
+      return;
+    }
     setLoading(true); setError(null); setResult(null); setEmailTxt("");
     try {
-      let messages;
       const contratCtx = (contratDebut||contratFin||contratValeur||contratAnciennete)?"\n\nCONTEXTE CONTRAT (essentiel pour l analyse) :"+(contratDebut?" Debut contrat: "+contratDebut+".":"")+(contratFin?" Fin contrat: "+contratFin+". Aujourd hui: "+new Date().toLocaleDateString("fr-FR")+".":"")+(contratValeur?" Valeur: "+contratValeur+" "+contratDevise+".":"")+(contratAnciennete?" Anciennete client: "+contratAnciennete+".":""):"";
+      let messages;
       if(inputMode==="pdf"){
         setLoadStep("Lecture du PDF...");
         messages=[{role:"user",content:[{type:"document",source:{type:"base64",media_type:"application/pdf",data:pdfB64}},{type:"text",text:"Analyse cette transcription selon les instructions."+contratCtx}]}];
@@ -386,13 +588,12 @@ function App() {
         messages=[{role:"user",content:"Transcription du call :\n\n"+transcript+contratCtx}];
       }
       setLoadStep("Analyse en cours...");
-      const data = await (await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:16000,system:callType==="renouvellement"?PROMPT_RNW:callType==="nb"?PROMPT_NB:callType==="winback"?PROMPT_WB:PROMPT_AM,messages})})).json();
+      const data = await (await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":trimmedApiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:16000,system:getSystemPrompt(callType),messages})})).json();
       if(data.error) throw new Error(data.error.message);
       const text = data.content.map(i=>i.text||"").join("");
       const a=text.indexOf("{"),b=text.lastIndexOf("}");
       if(a===-1||b===-1) throw new Error("Reponse inattendue.");
       const parsed = JSON.parse(text.slice(a,b+1));
-      parsed.type_call = callType;
       const entry = {id:Date.now(),date:new Date().toLocaleDateString("fr-FR"),am:am||"Neutre",callType,fileName:fileName||"",contrat:{debut:contratDebut,fin:contratFin,valeur:contratValeur,devise:contratDevise,anciennete:contratAnciennete},result:parsed};
       const updated = saveEntry(entry);
       setAnalyses(updated);
@@ -405,14 +606,19 @@ function App() {
   const genPatterns = async (amName) => {
     const calls = analyses.filter(a=>a.am===amName);
     if(calls.length<2) return;
+    const trimmedApiKey = apiKey.trim();
+    if (!trimmedApiKey) {
+      setPatData({error:"Ajoute une cle API Anthropic pour generer les patterns."});
+      return;
+    }
     setPatLoading(true); setPatData(null);
     try {
       const dataStr = calls.map((a,i)=>{
         const avg=weightedScore(a.result.scores,a.callType);
-        const cat = a.result?.categorie_prestataire||""; const nom = a.result?.nom_client||a.result?.nom_prospect||""; return "Call "+(i+1)+" ("+a.date+", "+a.callType+(cat?", "+cat:"")+(nom?", client: "+nom:"")+", anciennete: "+(a.contrat?.anciennete||"nc")+"): score="+avg+"/10, details="+Object.entries(a.result.scores).map(([k,v])=>k+"="+v.note).join(",")+", coaching=["+(a.result.top3_coaching||[]).join("|")+"], resultat="+(a.result.resultat_call||a.result.resume_executif?.issue_call||"nc")+"]";
+        const cat = a.result?.categorie_prestataire||""; const nom = a.result?.nom_client||a.result?.nom_prospect||""; return "Call "+(i+1)+" ("+a.date+", "+a.callType+(cat?", "+cat:"")+(nom?", client: "+nom:"")+", anciennete: "+(a.contrat?.anciennete||"nc")+"): score="+avg+"/10, details="+Object.entries(a.result.scores||{}).map(([k,v])=>k+"="+v.note).join(",")+", coaching=["+(a.result.top3_coaching||[]).join("|")+"], resultat="+(a.result.resultat_call||a.result.resume_executif?.issue_call||"nc")+"]";
       }).join("\n");
       const prompt = "Tu es expert en coaching commercial specialise dans les renouvellements B2B pour prestataires mariage (Mariages.net). Voici l historique de "+calls.length+" calls de "+amName+" (types: "+[...new Set(calls.map(a=>a.callType))].join(", ")+"). Analyse les patterns par type de call si pertinent. \\n\\n"+dataStr+"\\n\\nIdentifie les patterns recurrents. Retourne UNIQUEMENT un JSON valide:\\n{\"synthese\":\"profil global en 2-3 phrases\",\"points_forts_recurrents\":[\"pattern 1\",\"pattern 2\"],\"axes_faibles_recurrents\":[\"axe 1\",\"axe 2\"],\"evolution\":\"tendance avec evidence\",\"focus_coaching\":[\"priorite 1 pour les prochaines semaines\",\"priorite 2\"],\"message_manager\":\"message personnalise de coaching base sur les patterns\"}";
-      const data = await (await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:2000,messages:[{role:"user",content:prompt}]})})).json();
+      const data = await (await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":trimmedApiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:2000,messages:[{role:"user",content:prompt}]})})).json();
       if(data.error) throw new Error(data.error.message);
       const text=data.content.map(i=>i.text||"").join("");
       const a=text.indexOf("{"),b=text.lastIndexOf("}");
@@ -433,51 +639,55 @@ function App() {
     return {name,count:calls.length,avg,lastDate:calls[0].date,lastType:calls[0].callType};
   }).filter(Boolean).sort((a,b)=>(b.avg||0)-(a.avg||0));
 
-  const dims = result?.type_call==="suivi"?DIMS_AM:result?.type_call==="nb"?DIMS_NB:result?.type_call==="winback"?DIMS_WB:DIMS_RNW;
-  const gScore = result?.scores?weightedScore(result.scores,result.type_call):null;
-  const tabsRnw = [{id:"vue",l:"Vue strategique"},{id:"scores",l:"Scores"},{id:"ref",l:"Reformulations"},{id:"coaching",l:"Coaching"},{id:"email",l:"Email"}];
-  const tabsNB  = [{id:"vue",l:"Analyse"},{id:"structure",l:"Structure & SPIN"},{id:"scores",l:"Scores"},{id:"ref",l:"Reformulations"},{id:"coaching",l:"Coaching"},{id:"email",l:"Email"}];
-  const tabsWB  = [{id:"vue",l:"Analyse"},{id:"wb_structure",l:"Structure & SPIN"},{id:"scores",l:"Scores"},{id:"ref",l:"Reformulations"},{id:"coaching",l:"Coaching"},{id:"email",l:"Email"}];
-  const tabsAM  = [{id:"vue",l:"Situation client"},{id:"signaux",l:"Signaux"},{id:"scores",l:"Scores"},{id:"ref",l:"Reformulations"},{id:"coaching",l:"Coaching"},{id:"email",l:"Email"}];
-  const tabs2 = result?.type_call==="suivi"?tabsAM:result?.type_call==="nb"?tabsNB:result?.type_call==="winback"?tabsWB:tabsRnw;
+  const activeCallType = resolveCallType(result, callType);
+  const resultSummary = getResultSummary(result);
+  const resultOutcome = getResultOutcome(result);
+  const dims = getCallMeta(activeCallType).dims;
+  const gScore = result?.scores?weightedScore(result.scores,activeCallType):null;
+  const tabs2 = getCallTabs(activeCallType);
+  const hasApiKey = !!apiKey.trim();
+  const analyzeButton = getAnalyzeButtonState({ inputMode, pdfB64, transcript, loading, hasApiKey });
 
   return (
     <div style={{minHeight:"100vh",background:"#0a0a0f",color:"#e8e4dc"}}>
 
       {/* NAV */}
-      <div style={{borderBottom:"1px solid #1e1e2e",padding:"14px 28px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div style={{width:28,height:28,borderRadius:"50%",border:"2px solid #8b7355",display:"flex",alignItems:"center",justifyContent:"center",color:"#8b7355",fontSize:12}}>C</div>
-          <div>
-            <div style={pf({fontSize:17,fontWeight:700})}>Call Coach</div>
-            <div style={ss({fontSize:10,color:"#5a5a6e",letterSpacing:2,textTransform:"uppercase"})}>Mariages.net</div>
+      <div style={{borderBottom:"1px solid #1e1e2e",padding:"14px 28px"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,flexWrap:"wrap"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{width:28,height:28,borderRadius:"50%",border:"2px solid #8b7355",display:"flex",alignItems:"center",justifyContent:"center",color:"#8b7355",fontSize:12}}>C</div>
+            <div>
+              <div style={pf({fontSize:17,fontWeight:700})}>Call Coach</div>
+              <div style={ss({fontSize:10,color:"#5a5a6e",letterSpacing:2,textTransform:"uppercase"})}>Mariages.net</div>
+            </div>
+          </div>
+
+          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
+            {NAV_ITEMS.map(v=>(
+              <button key={v.s} onClick={()=>{
+                if(v.s==="home"){ goHome(); return; }
+                setScreen(v.s);
+              }} style={{padding:"6px 14px",borderRadius:8,border:"none",background:screen===v.s?"#1a1208":"none",color:screen===v.s?"#e8c97a":"#6b6b7e",fontFamily:"system-ui,sans-serif",fontSize:12,fontWeight:screen===v.s?600:400}}>
+                {v.l}{v.s==="history"&&analyses.length?" ("+analyses.length+")":""}
+              </button>
+            ))}
           </div>
         </div>
-        <div style={{display:"flex",gap:2}}>
-          {!apiKey && (
-          <div style={{background:"#1a0808",border:"1px solid #f87171",borderRadius:10,padding:"12px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-            <span style={{fontSize:12,color:"#f87171",flex:1}}>Cle API Anthropic requise pour analyser et generer les patterns.</span>
-            <input value={apiKey} onChange={e=>{ setApiKey(e.target.value); localStorage.setItem("ccApiKey",e.target.value); }}
+
+        {!hasApiKey ? (
+          <div style={{background:"#1a0808",border:"1px solid #f87171",borderRadius:10,padding:"12px 16px",marginTop:14,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+            <span style={{fontSize:12,color:"#f87171",flex:1,minWidth:220}}>Cle API Anthropic requise pour analyser et generer les patterns.</span>
+            <input value={apiKey} onChange={e=>persistApiKey(e.target.value)}
               placeholder="sk-ant-..." type="password"
-              style={{padding:"6px 12px",background:"#0a0a0f",border:"1px solid #2a2a3e",borderRadius:8,color:"#e8e4dc",fontFamily:"monospace",fontSize:12,width:280}}/>
+              style={{padding:"6px 12px",background:"#0a0a0f",border:"1px solid #2a2a3e",borderRadius:8,color:"#e8e4dc",fontFamily:"monospace",fontSize:12,width:280,maxWidth:"100%"}}/>
           </div>
-        )}
-        {apiKey && (
-          <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}>
-            <button onClick={()=>{ setApiKey(""); localStorage.removeItem("ccApiKey"); }} style={{background:"none",border:"none",color:"#3a3a4e",fontSize:11,fontFamily:"system-ui,sans-serif",cursor:"pointer"}}>
+        ) : (
+          <div style={{display:"flex",justifyContent:"flex-end",marginTop:10}}>
+            <button onClick={()=>persistApiKey("")} style={{background:"none",border:"none",color:"#3a3a4e",fontSize:11,fontFamily:"system-ui,sans-serif",cursor:"pointer"}}>
               Effacer la cle API
             </button>
           </div>
         )}
-        {[{s:"home",l:"Analyser"},{s:"history",l:"Historique"},{s:"patterns",l:"Patterns"}].map(v=>(
-            <button key={v.s} onClick={()=>{
-              if(v.s==="home"){setCallType(null);setAm(null);setResult(null);setError(null);setPdfB64(null);setFileName(null);setTranscript("");setInputMode("pdf");setEmailTxt("");setEmailCopied(false);setFromHistory(false);setViewingEntry(null);setContratDebut("");setContratFin("");setContratValeur("");setContratDevise("HT");setContratAnciennete("");}
-              setScreen(v.s);
-            }} style={{padding:"6px 14px",borderRadius:8,border:"none",background:screen===v.s?"#1a1208":"none",color:screen===v.s?"#e8c97a":"#6b6b7e",fontFamily:"system-ui,sans-serif",fontSize:12,fontWeight:screen===v.s?600:400}}>
-              {v.l}{v.s==="history"&&analyses.length?" ("+analyses.length+")":""}
-            </button>
-          ))}
-        </div>
       </div>
 
       <div style={{maxWidth:840,margin:"0 auto",padding:"32px 20px"}}>
@@ -488,7 +698,7 @@ function App() {
             <div style={pf({fontSize:26,fontWeight:900,marginBottom:6})}>Quel type de call <span style={{color:"#8b7355"}}>analyser ?</span></div>
             <p style={ss({color:"#6b6b7e",fontSize:13,marginBottom:28})}>Le prompt s adapte automatiquement.</p>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,maxWidth:520}}>
-              {[{id:"renouvellement",l:"Renouvellement",sub:"Renouvellement ou upsell"},{id:"suivi",l:"Account Management",sub:"Service call / suivi de compte"},{id:"nb",l:"New Business",sub:"Premier contact / decouverte"},{id:"winback",l:"Winback",sub:"Client perdu depuis moins de 6 mois"}].map(t=>(
+              {CALL_TYPE_OPTIONS.map(t=>(
                 <button key={t.id} onClick={()=>{setCallType(t.id);setScreen("am");}} style={{background:"#0f0f1a",border:"1px solid #2a2a3e",borderRadius:14,padding:"24px 20px",textAlign:"left",color:"#e8e4dc"}}>
                   <div style={pf({fontSize:16,fontWeight:700,marginBottom:5})}>{t.l}</div>
                   <div style={ss({fontSize:12,color:"#6b6b7e"})}>{t.sub}</div>
@@ -519,13 +729,13 @@ function App() {
         {screen==="upload" && (
           <div className="fi">
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:24}}>
-              <button onClick={()=>{setPdfB64(null);setFileName(null);setTranscript("");setInputMode("pdf");setScreen("am");}} style={{background:"none",border:"none",color:"#6b6b7e",fontSize:12,fontFamily:"system-ui,sans-serif"}}>Retour</button>
+              <button onClick={()=>{resetInputFields(); resetContractFields(); setScreen("am");}} style={{background:"none",border:"none",color:"#6b6b7e",fontSize:12,fontFamily:"system-ui,sans-serif"}}>Retour</button>
               <div style={{width:1,height:12,background:"#2a2a3e"}}/>
-              <div style={ss({fontSize:11,color:"#8b7355",textTransform:"uppercase",letterSpacing:2})}>{callType==="renouvellement"?"Renouvellement":callType==="nb"?"New Business":callType==="winback"?"Winback":"Account Management"} · {am}</div>
+              <div style={ss({fontSize:11,color:"#8b7355",textTransform:"uppercase",letterSpacing:2})}>{getCallLabel(callType)} · {am}</div>
             </div>
             <div style={pf({fontSize:22,fontWeight:900,marginBottom:20})}>Importe la <span style={{color:"#8b7355"}}>transcription.</span></div>
             <div style={{display:"flex",gap:8,marginBottom:16}}>
-              {[{id:"pdf",l:"PDF"},{id:"text",l:"Texte"}].map(m=>(
+              {INPUT_MODE_OPTIONS.map(m=>(
                 <button key={m.id} onClick={()=>setInputMode(m.id)} style={{padding:"6px 16px",borderRadius:8,border:"1px solid",borderColor:inputMode===m.id?"#8b7355":"#2a2a3e",background:inputMode===m.id?"#1a1208":"none",color:inputMode===m.id?"#e8c97a":"#6b6b7e",fontFamily:"system-ui,sans-serif",fontSize:13,fontWeight:600}}>
                   {m.l}
                 </button>
@@ -584,21 +794,16 @@ function App() {
                   <div style={ss({fontSize:11,color:"#6b6b7e",marginBottom:4})}>Ancienneté client</div>
                   <select value={contratAnciennete} onChange={e=>setContratAnciennete(e.target.value)}
                     style={{width:"100%",background:"#0a0a0f",border:"1px solid #2a2a3e",borderRadius:8,padding:"7px 10px",color:"#e8e4dc",fontSize:13,fontFamily:"system-ui,sans-serif"}}>
-                    <option value="">—</option>
-                    <option>Nouveau client</option>
-                    <option>1 an</option>
-                    <option>2 ans</option>
-                    <option>3 ans</option>
-                    <option>4 ans</option>
-                    <option>5 ans et plus</option>
+                    <option value="">-</option>
+                    {CLIENT_TENURE_OPTIONS.map(option=><option key={option}>{option}</option>)}
                   </select>
                 </div>
               </div>
             </div>
 
-            <button onClick={analyze} disabled={loading||!(inputMode==="pdf"?pdfB64:transcript.trim())}
-              style={{padding:"11px 28px",background:(loading||!(inputMode==="pdf"?pdfB64:transcript.trim()))?"#1e1e2e":"#8b7355",border:"none",borderRadius:8,color:(loading||!(inputMode==="pdf"?pdfB64:transcript.trim()))?"#4a4a5e":"#fff0d8",fontSize:13,fontFamily:"system-ui,sans-serif",fontWeight:600,display:"flex",alignItems:"center",gap:10}}>
-              {loading?<><span className="pu">◎</span> {loadStep}</>:"Analyser le call"}
+            <button onClick={analyze} disabled={analyzeButton.disabled}
+              style={{padding:"11px 28px",background:analyzeButton.disabled?"#1e1e2e":"#8b7355",border:"none",borderRadius:8,color:analyzeButton.disabled?"#4a4a5e":"#fff0d8",fontSize:13,fontFamily:"system-ui,sans-serif",fontWeight:600,display:"flex",alignItems:"center",gap:10,cursor:analyzeButton.disabled?"not-allowed":"pointer"}}>
+              {loading?<><span className="pu">◎</span> {loadStep}</>:analyzeButton.label}
             </button>
           </div>
         )}
@@ -624,16 +829,16 @@ function App() {
             {/* Header rapport */}
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20,flexWrap:"wrap",gap:14}}>
               <div>
-                <div style={ss({fontSize:10,color:"#6b6b7e",textTransform:"uppercase",letterSpacing:2,marginBottom:6})}>{result.type_call==="suivi"?"Account Management":result.type_call==="nb"?"New Business":result.type_call==="winback"?"Winback":"Renouvellement"} · {am}</div>
+                <div style={ss({fontSize:10,color:"#6b6b7e",textTransform:"uppercase",letterSpacing:2,marginBottom:6})}>{getCallLabel(activeCallType)} · {am}</div>
                 {(result.nom_client||result.nom_prospect||result.categorie_prestataire)&&(
                   <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:6}}>
                     {(result.nom_client||result.nom_prospect)&&<span style={ss({fontSize:12,padding:"3px 10px",borderRadius:20,background:"#1a1208",color:"#e8c97a",border:"1px solid #3a2a10"})}>{result.nom_client||result.nom_prospect}</span>}
                     {result.categorie_prestataire&&<span style={ss({fontSize:12,padding:"3px 10px",borderRadius:20,background:"#0f1a1a",color:"#4ade80",border:"1px solid #1a3a1a"})}>{result.categorie_prestataire}</span>}
-                    {result.resultat_call&&result.resultat_call!=="Inconnu"&&<span style={ss({fontSize:12,padding:"3px 10px",borderRadius:20,background:result.resultat_call==="Signe"?"#0a1a0a":"#1a0a0a",color:result.resultat_call==="Signe"?"#4ade80":"#f87171",border:"1px solid "+(result.resultat_call==="Signe"?"#1a3a1a":"#3a1a1a")})}>{result.resultat_call}</span>}
+                    {resultOutcome&&<span style={ss({fontSize:12,padding:"3px 10px",borderRadius:20,background:resultOutcome==="Signe"?"#0a1a0a":"#1a0a0a",color:resultOutcome==="Signe"?"#4ade80":"#f87171",border:"1px solid "+(resultOutcome==="Signe"?"#1a3a1a":"#3a1a1a")})}>{resultOutcome}</span>}
                   </div>
                 )}
                 <div style={pf({fontSize:20,fontWeight:700,marginBottom:8})}>Rapport de coaching</div>
-                <div style={ss({color:"#9a9aae",fontSize:13,maxWidth:440,lineHeight:1.6})}>{result.resume}</div>
+                <div style={ss({color:"#9a9aae",fontSize:13,maxWidth:440,lineHeight:1.6})}>{resultSummary}</div>
               </div>
               <div style={{textAlign:"center",background:"#0f0f1a",border:"2px solid "+sc(gScore),borderRadius:12,padding:"14px 22px"}}>
                 <div style={pf({fontSize:40,fontWeight:900,color:sc(gScore),lineHeight:1})}>{gScore}</div>
@@ -655,8 +860,8 @@ function App() {
               {tabs2.map(t=><Tab key={t.id} active={tab===t.id} onClick={()=>setTab(t.id)}>{t.l}</Tab>)}
             </div>
 
-            {/* TAB: VUE — RNW */}
-            {tab==="vue"&&result.type_call==="renouvellement"&&(
+            {/* TAB: VUE - RNW */}
+            {tab==="vue"&&activeCallType==="renouvellement"&&(
               <div style={{display:"flex",flexDirection:"column",gap:12}}>
                 {[{l:"Enjeu reel",v:result.enjeu_reel,c:"#8b7355"},{l:"Rapport de force",v:result.rapport_de_force,c:"#a78bfa"},{l:"Probabilite renouvellement",v:result.probabilite_renouvellement,c:"#4ade80"}].map((it,i)=>it.v&&(
                   <Card key={i} left={it.c}><SL c={it.c}>{it.l}</SL><div style={ss({fontSize:13,lineHeight:1.7,color:"#c8c4bc"})}>{it.v}</div></Card>
@@ -665,16 +870,16 @@ function App() {
               </div>
             )}
 
-            {/* TAB: VUE — AM */}
-            {tab==="vue"&&result.type_call==="suivi"&&result.situation_client&&(
+            {/* TAB: VUE - AM */}
+            {tab==="vue"&&activeCallType==="suivi"&&result.situation_client&&(
               <div style={{display:"flex",flexDirection:"column",gap:12}}>
                 {Object.entries({Activite:result.situation_client.activite,"Satisfaction globale":result.situation_client.satisfaction_globale,"Resultats Mariages.net":result.situation_client.resultats_mariagesnet,"Autres sources":result.situation_client.autres_sources,"Dependance plateforme":result.situation_client.dependance,"Attentes implicites":result.situation_client.attentes_implicites}).map(([l,v],i)=>v&&<Card key={i} left="#8b7355"><SL c="#8b7355">{l}</SL><div style={ss({fontSize:13,lineHeight:1.7,color:"#c8c4bc"})}>{v}</div></Card>)}
                 {result.opportunites_manquees&&<Card><SL c="#fb923c">Opportunites manquees</SL>{result.opportunites_manquees.map((o,i)=><div key={i} style={{display:"flex",gap:12,marginBottom:i<result.opportunites_manquees.length-1?10:0}}><div style={pf({color:"#fb923c",fontWeight:700,fontSize:15,minWidth:18})}>{i+1}</div><div style={ss({fontSize:13,lineHeight:1.6,color:"#b8b4ac"})}>{o}</div></div>)}</Card>}
               </div>
             )}
 
-            {/* TAB: VUE — NB */}
-            {tab==="vue"&&result.type_call==="nb"&&(
+            {/* TAB: VUE - NB */}
+            {tab==="vue"&&activeCallType==="nb"&&(
               <div style={{display:"flex",flexDirection:"column",gap:12}}>
                 {result.resume_executif&&(
                   <Card left="#8b7355">
@@ -704,7 +909,7 @@ function App() {
                 {result.spin&&(
                   <Card left="#facc15">
                     <SL c="#facc15">Analyse SPIN</SL>
-                    {[{l:"S — Situation",v:result.spin.situation},{l:"P — Problem",v:result.spin.problem},{l:"I — Implication",v:result.spin.implication},{l:"N — Need-Payoff",v:result.spin.need_payoff},{l:"Verdict SPIN",v:result.spin.verdict_spin}].map((it,i)=>it.v&&(
+                    {[{l:"S - Situation",v:result.spin.situation},{l:"P - Problem",v:result.spin.problem},{l:"I - Implication",v:result.spin.implication},{l:"N - Need-Payoff",v:result.spin.need_payoff},{l:"Verdict SPIN",v:result.spin.verdict_spin}].map((it,i)=>it.v&&(
                       <div key={i} style={{marginBottom:i<4?10:0,paddingBottom:i<4?10:0,borderBottom:i<4?"1px solid #1a1a2a":"none"}}>
                         <div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#facc15",marginBottom:3})}>{it.l}</div>
                         <div style={ss({fontSize:13,lineHeight:1.6,color:"#c8c4bc"})}>{it.v}</div>
@@ -741,8 +946,8 @@ function App() {
               </div>
             )}
 
-            {/* TAB: VUE — WB */}
-            {tab==="vue"&&result.type_call==="winback"&&(
+            {/* TAB: VUE - WB */}
+            {tab==="vue"&&activeCallType==="winback"&&(
               <div style={{display:"flex",flexDirection:"column",gap:12}}>
                 {result.resume_executif&&(
                   <Card left="#f87171">
@@ -823,8 +1028,8 @@ function App() {
               </div>
             )}
 
-            {/* TAB: STRUCTURE — NB */}
-            {tab==="structure"&&result.type_call==="nb"&&(
+            {/* TAB: STRUCTURE - NB */}
+            {tab==="structure"&&activeCallType==="nb"&&(
               <div style={{display:"flex",flexDirection:"column",gap:12}}>
                 {result.structure_call&&(
                   <Card>
@@ -861,7 +1066,7 @@ function App() {
                 {result.argumentation_valeur&&(
                   <Card left="#a78bfa">
                     <SL c="#a78bfa">Argumentation & Valeur</SL>
-                    {Object.entries({"Vend fonctionnalites ou valeur":result.argumentation_valeur.vend_fonctionnalites_ou_valeur,"Adaptation au profil":result.argumentation_valeur.adaptation_profil,"Lien avec enjeux prospect":result.argumentation_valeur.lien_enjeux_prospect,"Creation de projection":result.argumentation_valeur.creation_projection,"Defense valeur plateforme":result.argumentation_valeur.defense_valeur_plateforme}).map(([label,v],i)=>v&&(
+                    {Object.entries({"Vend ROI ou fonctionnalites":result.argumentation_valeur.vend_roi_ou_fonctionnalites||result.argumentation_valeur.vend_fonctionnalites_ou_valeur,"Adaptation au profil":result.argumentation_valeur.adapte_profil_prestataire||result.argumentation_valeur.adaptation_profil,"Lien avec enjeux prospect":result.argumentation_valeur.lien_enjeux_prospect,"Creation de projection":result.argumentation_valeur.creation_projection,"Defense valeur plateforme":result.argumentation_valeur.defense_valeur_plateforme}).map(([label,v],i)=>v&&(
                       <div key={i} style={{marginBottom:i<4?8:0,paddingBottom:i<4?8:0,borderBottom:i<4?"1px solid #1a1a2a":"none"}}>
                         <div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#a78bfa",marginBottom:2})}>{label}</div>
                         <div style={ss({fontSize:12,lineHeight:1.5,color:"#c8c4bc"})}>{v}</div>
@@ -872,8 +1077,8 @@ function App() {
               </div>
             )}
 
-            {/* TAB: STRUCTURE — WB */}
-            {tab==="wb_structure"&&result.type_call==="winback"&&(
+            {/* TAB: STRUCTURE - WB */}
+            {tab==="wb_structure"&&activeCallType==="winback"&&(
               <div style={{display:"flex",flexDirection:"column",gap:12}}>
                 {result.structure_call&&(
                   <Card>
@@ -897,7 +1102,7 @@ function App() {
                 {result.spin_winback&&(
                   <Card left="#facc15">
                     <SL c="#facc15">SPIN adapte au winback</SL>
-                    {[{l:"S — Situation depuis le depart",v:result.spin_winback.situation},{l:"P — Problemes identifies",v:result.spin_winback.problem},{l:"I — Consequences de ne plus etre sur Mariages.net",v:result.spin_winback.implication},{l:"N — Valeur verbalisee d un retour",v:result.spin_winback.need_payoff},{l:"Verdict SPIN",v:result.spin_winback.verdict}].map((it,i)=>it.v&&(
+                    {[{l:"S - Situation depuis le depart",v:result.spin_winback.situation},{l:"P - Problemes identifies",v:result.spin_winback.problem},{l:"I - Consequences de ne plus etre sur Mariages.net",v:result.spin_winback.implication},{l:"N - Valeur verbalisee d un retour",v:result.spin_winback.need_payoff},{l:"Verdict SPIN",v:result.spin_winback.verdict}].map((it,i)=>it.v&&(
                       <div key={i} style={{marginBottom:i<4?10:0,paddingBottom:i<4?10:0,borderBottom:i<4?"1px solid #1a1a2a":"none"}}>
                         <div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#facc15",marginBottom:3})}>{it.l}</div>
                         <div style={ss({fontSize:13,lineHeight:1.6,color:"#c8c4bc"})}>{it.v}</div>
@@ -1056,35 +1261,12 @@ function App() {
                 <label style={{padding:"7px 16px",background:"#0a1a0a",border:"1px solid #4ade80",borderRadius:8,color:"#4ade80",fontFamily:"system-ui,sans-serif",fontSize:12,fontWeight:600,cursor:"pointer"}}>
                   Importer JSON
                   <input type="file" accept="application/json" style={{display:"none"}} onChange={e=>{
-                    const f=e.target.files?.[0]; if(!f) return;
-                    const reader=new FileReader();
-                    reader.onload=ev=>{
-                      try {
-                        const imported=JSON.parse(ev.target.result);
-                        if(!Array.isArray(imported)) throw new Error("Format invalide");
-                        const existing=loadAll();
-                        const existingIds=new Set(existing.map(a=>a.id));
-                        const merged=[...existing,...imported.filter(a=>!existingIds.has(a.id))];
-                        merged.sort((a,b)=>b.id-a.id);
-                        localStorage.setItem(STORAGE_KEY,JSON.stringify(merged));
-                        setAnalyses(merged);
-                        setImportMsg(imported.length+" analyse(s) importee(s). Total : "+merged.length+".");
-                        setTimeout(()=>setImportMsg(""),4000);
-                      } catch(err){ setImportMsg("Erreur : "+err.message); setTimeout(()=>setImportMsg(""),4000); }
-                    };
-                    reader.readAsText(f);
+                    handleImportHistory(e.target.files?.[0]);
                     e.target.value="";
                   }}/>
                 </label>
                 {analyses.length>0&&(
-                  <button onClick={()=>{
-                    const json=JSON.stringify(analyses,null,2);
-                    const blob=new Blob([json],{type:"application/json"});
-                    const url=URL.createObjectURL(blob);
-                    const a=document.createElement("a");
-                    a.href=url; a.download="callcoach-historique-"+new Date().toLocaleDateString("fr-FR").replace(/\//g,"-")+".json";
-                    a.click(); URL.revokeObjectURL(url);
-                  }} style={{padding:"7px 16px",background:"#1a1208",border:"1px solid #8b7355",borderRadius:8,color:"#e8c97a",fontFamily:"system-ui,sans-serif",fontSize:12,fontWeight:600}}>
+                  <button onClick={exportHistory} style={{padding:"7px 16px",background:"#1a1208",border:"1px solid #8b7355",borderRadius:8,color:"#e8c97a",fontFamily:"system-ui,sans-serif",fontSize:12,fontWeight:600}}>
                     Exporter JSON
                   </button>
                 )}
@@ -1106,10 +1288,10 @@ function App() {
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                         <span style={ss({fontWeight:600,fontSize:14})}>{a.am}</span>
-                        <span style={ss({fontSize:11,padding:"2px 8px",borderRadius:20,background:"#1a1a2a",color:"#6b6b7e"})}>{a.callType==="suivi"?"AM":a.callType==="nb"?"NB":a.callType==="winback"?"WB":"RNW"}</span>
+                        <span style={ss({fontSize:11,padding:"2px 8px",borderRadius:20,background:"#1a1a2a",color:"#6b6b7e"})}>{getCallShortLabel(a.callType)}</span>
                         <span style={ss({fontSize:11,color:"#5a5a6e"})}>{a.date}</span>
                       </div>
-                      <div style={ss({fontSize:12,color:"#7a7a8e",marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"})}>{(a.result.resume||a.result.resume_executif?.resume||"")?.slice(0,80)}...</div>
+                      <div style={ss({fontSize:12,color:"#7a7a8e",marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"})}>{getResultSummary(a.result)?.slice(0,80)}...</div>
                     </div>
                     {confirmDelete===a.id?(
                       <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}} onClick={e=>e.stopPropagation()}>
