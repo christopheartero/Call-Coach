@@ -1,0 +1,1362 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Call Coach - Mariages.net</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0a0a0f;color:#e8e4dc;font-family:system-ui,-apple-system,sans-serif}
+button{cursor:pointer}
+.fi{animation:fi .4s forwards;opacity:0}
+@keyframes fi{to{opacity:1}}
+.pu{animation:pu 1.4s infinite}
+@keyframes pu{0%,100%{opacity:1}50%{opacity:.3}}
+textarea{outline:none}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:#0f0f1a}
+::-webkit-scrollbar-thumb{background:#2a2a3e;border-radius:3px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useRef, useEffect } = React;
+
+const AMS = ["Julie","Lauriane","David","Farah","Filipe","Clara","Antoine","Laurine","Anais","Neutre"];
+const STORAGE_KEY = "callcoach_v1";
+const API_STORAGE_KEY = "ccApiKey";
+
+// ─── STORAGE (localStorage) ────────────────────────────────────────────────
+function loadAll() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }
+  catch { return []; }
+}
+function saveEntry(entry) {
+  try {
+    const all = loadAll();
+    all.unshift(entry);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+    return all;
+  } catch { return []; }
+}
+function deleteEntry(id) {
+  try {
+    const filtered = loadAll().filter(a => a.id !== id);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+    return filtered;
+  } catch { return []; }
+}
+
+// ─── PROMPTS ───────────────────────────────────────────────────────────────
+const PROMPT_RNW = `Tu es un expert senior en coaching commercial, specialise dans les calls de renouvellement B2B pour des plateformes de visibilite prestataires mariage (Mariages.net / The Knot Worldwide).
+
+CONTEXTE METIER OBLIGATOIRE :
+- Les clients sont des prestataires de mariage abonnes a Mariages.net
+- CATEGORIES PRESTATAIRES MARIAGES.NET (identifier parmi cette liste exacte, ou 'Autre' si inconnu) : Accessoires marié, Accessoires mariage, Animation mariage, Bijoux mariage, Bus mariage, Cadeaux invités mariage, Chapiteaux, Costumes mariage, Décoration mariage, Esthétique coiffure mariage, Faire part mariage, Fleurs mariage, Food Truck, Liste de mariage, Lune de miel, Musique mariage, Officiant, Organisation, Photo mariage, Robes de mariées, Robe cocktail, Soins beauté, Vidéo mariage, Vin et Spiritueux, Voiture mariage, Wedding cake
+- Ils paient un abonnement annuel de visibilite pour generer des leads et des demandes de mariage
+- La valeur est evaluee sur : leads recus, demandes directes, RDV, devis envoyes, mariages signes, ROI global
+- Objections frequentes : baisse de trafic, leads non qualifies, hausse tarifaire, ROI percu insuffisant, comparaison annee precedente, probleme multifiche
+- Un client peut etre objectivement rentable mais subjectivement decu - donc a risque si le call est mal mene
+- Philosophie : ROI recontextualise > concession prix. On ne cede sur le tarif que si le dossier est genuinement fragile
+- Le goodwill (remise, geste commercial) est toujours un DERNIER recours, jamais un premier reflexe
+
+CRITERES D EVALUATION :
+1. Decouverte & Diagnostic - BIEN: questions ouvertes, quantification precise des resultats, lecture economique du dossier, distinction perception vs realite des chiffres. MAL: bilan superficiel, abandon de la quantification, accepter la perception client sans creuser les faits.
+2. Construction de Valeur - BIEN: relier les resultats concrets au benefice business du prestataire, ROI personnalise au profil (photographe vs traiteur vs lieu), ancrer la valeur AVANT le prix, utiliser les donnees du dossier. MAL: pitch generique, ignorer les preuves, parler tarif avant valeur.
+3. Gestion des Objections (CRITIQUE) - BIEN: laisser formuler entierement, reformuler pour valider, defendre la valeur avec des faits AVANT toute compensation, geste commercial en dernier recours. MAL: compenser avant que l objection soit posee, ceder immediatement, sur-valider la frustration.
+4. Closing & Next Steps - BIEN: securisation verbale explicite, next step date et concret, ne jamais laisser le call dans le flou. MAL: fin ambigue, "vous reflechissez", pas de date.
+5. Posture & Relation - BIEN: chaleureux ET assure, leadership sur le prix, reconnaitre les frustrations sans les amplifier. MAL: posture defensive, exces de validation, s excuser du tarif.
+
+JSON ATTENDU:
+{"commercial":"prenom","type_call":"renouvellement","categorie_prestataire":"categorie exacte identifiee parmi la liste Mariages.net, ou Autre","nom_client":"nom identifie ou Inconnu","resume":"2-3 phrases","enjeu_reel":"vrai enjeu commercial et relationnel","rapport_de_force":"qui controlait le call et pourquoi","resultat_call":"Signe ou En reflexion ou Refuse ou Inconnu","probabilite_renouvellement":"% + justification","scores":{"decouverte":{"note":0,"positif":"","amelioration":"","exemple":""},"valeur":{"note":0,"positif":"","amelioration":"","exemple":""},"objections":{"note":0,"positif":"","amelioration":"","exemple":""},"closing":{"note":0,"positif":"","amelioration":"","exemple":""},"posture":{"note":0,"positif":"","amelioration":"","exemple":""}},"objections_identifiees":[{"objection":"","type":"Explicite ou Implicite","reponse_commerciale":"","evaluation":"","mieux_faire":""}],"opportunites_manquees":["moment 1","moment 2","moment 3"],"reformulations":[{"situation":"","dit":"","aurait_du_dire":""},{"situation":"","dit":"","aurait_du_dire":""},{"situation":"","dit":"","aurait_du_dire":""}],"top3_coaching":["priorite 1","priorite 2","priorite 3"],"a_surveiller":"","verdict":""}
+
+CALIBRAGE DES NOTES - OBLIGATOIRE :
+1-3 = Execution tres insuffisante, erreurs majeures qui nuisent a la retention.
+4-5 = En dessous des attentes, axes critiques non maitrises.
+6-7 = Niveau correct avec lacunes notables (6 = call sans erreur majeure).
+8-9 = Au-dessus des attentes, maitrise solide adaptee au profil client.
+10 = Excellence rare.
+REGLES : Ne pas sur-noter. Le RESULTAT FINAL pese lourd dans closing et posture. Un call aimable qui ne securise pas = 5 max en closing.`
+
+const PROMPT_AM = `Tu es un expert en Account Management et Customer Success B2B, specialise dans la prevention du churn pour des plateformes de visibilite prestataires mariage.
+
+CONTEXTE METIER OBLIGATOIRE :
+- Clients = prestataires de mariage abonnes a Mariages.net
+- CATEGORIES PRESTATAIRES MARIAGES.NET (identifier parmi cette liste exacte, ou 'Autre' si inconnu) : Accessoires marié, Accessoires mariage, Animation mariage, Bijoux mariage, Bus mariage, Cadeaux invités mariage, Chapiteaux, Costumes mariage, Décoration mariage, Esthétique coiffure mariage, Faire part mariage, Fleurs mariage, Food Truck, Liste de mariage, Lune de miel, Musique mariage, Officiant, Organisation, Photo mariage, Robes de mariées, Robe cocktail, Soins beauté, Vidéo mariage, Vin et Spiritueux, Voiture mariage, Wedding cake
+- Call de suivi en cours de contrat - objectif : maintenir la relation, detecter les signaux faibles, preparer le terrain du renouvellement
+- Le churn est souvent annonce implicitement avant d etre exprime - lire entre les lignes
+- Un client "poli mais distant" est souvent plus a risque qu un client qui se plaint ouvertement
+- Philosophie : ROI recontextualise > concession prix. Detecter les frustrations implicites est aussi important que les explicites
+
+CRITERES D EVALUATION :
+1. Decouverte - BIEN: explorer le business actuel (volume mariages, saisonnalite, canaux utilises, concurrents), pas juste "comment ca va". MAL: call de politesse sans contenu, questions fermees.
+2. Diagnostic Business - BIEN: comprendre la situation economique reelle, si Mariages.net represente une part significative du CA, evaluer la dependance ou l independance a la plateforme. MAL: rester en surface, ne pas quantifier.
+3. Detection des Risques (CRITIQUE) - BIEN: reperer les signaux verbaux de churn (conditionnels, minimisation, comparaison concurrents, hesitation sur valeur), les nommer et les adresser. MAL: ignorer les signaux, clore sans avoir traite les points de friction.
+4. Creation de Valeur - BIEN: rappeler des resultats concrets, aider le client a voir la valeur qu il ne percoit pas toujours, repositionner Mariages.net dans son ecosysteme. MAL: call sans apport concret.
+5. Preparation Renouvellement - BIEN: planter des graines pour le renouvellement sans vendre, identifier les objections potentielles, renforcer le lien humain. MAL: ignorer la dimension renouvellement, laisser la relation froide.
+
+JSON ATTENDU:
+{"commercial":"prenom","type_call":"suivi","categorie_prestataire":"categorie exacte identifiee parmi la liste Mariages.net, ou Autre","nom_client":"nom identifie ou Inconnu","resume":"5-8 lignes","niveau_qualite":"Rassurant ou Neutre ou Preoccupant ou Tres preoccupant","risque_churn":"Faible ou Modere ou Eleve + justification","probabilite_renouvellement":"% + justification","situation_client":{"activite":"","satisfaction_globale":"","resultats_mariagesnet":"","autres_sources":"","dependance":"","attentes_implicites":"","frustrations_detectees":""},"scores":{"decouverte":{"note":0,"positif":"","amelioration":"","exemple":""},"diagnostic_business":{"note":0,"positif":"","amelioration":"","exemple":""},"detection_risques":{"note":0,"positif":"","amelioration":"","exemple":""},"creation_valeur":{"note":0,"positif":"","amelioration":"","exemple":""},"preparation_renouvellement":{"note":0,"positif":"","amelioration":"","exemple":""}},"signaux":{"positifs":["s1"],"vigilance":["v1"],"churn":[]},"opportunites_manquees":["m1","m2","m3"],"reformulations":[{"situation":"","dit":"","aurait_du_dire":""},{"situation":"","dit":"","aurait_du_dire":""},{"situation":"","dit":"","aurait_du_dire":""}],"top3_questions_manquantes":["q1","q2","q3"],"top3_coaching":["p1","p2","p3"],"prochaine_action":"","a_surveiller":"","verdict":""}
+
+CALIBRAGE DES NOTES - OBLIGATOIRE :
+1-3 = Call sans valeur, client sort plus froid.
+4-5 = En dessous des attentes, signaux manques.
+6-7 = Correct mais superficiel, relation maintenue sans etre renforcee.
+8-9 = Diagnostic business reel, client repart confiant.
+10 = Excellence rare.
+REGLES : Un call aimable mais superficiel = 5 max sur diagnostic et detection risques. La PROFONDEUR du diagnostic et la DETECTION DES SIGNAUX FAIBLES sont les criteres les plus discriminants.`
+
+const PROMPT_NB = `Tu es un expert en Sales Performance, specialise en prospection B2B, discovery et closing pour des plateformes de visibilite prestataires mariage.
+
+CONTEXTE METIER OBLIGATOIRE :
+- Le prospect est un prestataire de mariage pas encore client Mariages.net
+- CATEGORIES PRESTATAIRES MARIAGES.NET (identifier parmi cette liste exacte, ou 'Autre' si inconnu) : Accessoires marié, Accessoires mariage, Animation mariage, Bijoux mariage, Bus mariage, Cadeaux invités mariage, Chapiteaux, Costumes mariage, Décoration mariage, Esthétique coiffure mariage, Faire part mariage, Fleurs mariage, Food Truck, Liste de mariage, Lune de miel, Musique mariage, Officiant, Organisation, Photo mariage, Robes de mariées, Robe cocktail, Soins beauté, Vidéo mariage, Vin et Spiritueux, Voiture mariage, Wedding cake
+- Mariages.net vend des abonnements annuels de visibilite pour generer des leads et demandes directes
+- Niveaux d offre : gold, silver, premium, advanced
+- Objections frequentes : "j ai deja assez de clients", "je ne connais pas Mariages.net", "trop cher", "j utilise Instagram/Google/bouche-a-oreille"
+- La valeur se demontre par le ROI potentiel adapte au profil du prestataire
+- Adapter le pitch au type : photographe = leads qualifies, traiteur = volume, lieu = mariages signes
+
+CRITERES D EVALUATION :
+1. Qualification - BIEN: identifier budget, maturite, decideur, volume de mariages actuel, canaux utilises. MAL: passer au pitch sans qualifier.
+2. Decouverte des besoins - BIEN: questions ouvertes sur les douleurs (manque de visibilite, saisonnalite, dependance a un seul canal), objectifs de croissance. MAL: monologue, ne pas ecouter.
+3. Pitch adapte au profil - BIEN: adapter au type de prestataire avec ROI concret et exemples de profils similaires. MAL: pitch generique identique pour tous.
+4. Gestion des Objections - BIEN: reformuler, traiter avec preuves et cas concrets, ne pas capituler ni sur-promettre. MAL: ceder immediatement, promettre l impossible.
+5. Next Steps & Urgence - BIEN: prochain RDV date, engagement clair, sens de l opportunite sans pression artificielle. MAL: fin floue, pas de date.
+
+JSON ATTENDU :
+{"commercial":"prenom","type_call":"nb","categorie_prestataire":"categorie exacte identifiee ou supposee parmi la liste Mariages.net, ou Autre","nom_prospect":"nom identifie ou Inconnu","resume_executif":{"resume":"5-10 lignes","objectif_reel_call":"","issue_call":"","interet_prospect":"Faible ou Moyen ou Eleve","maturite_prospect":"Faible ou Moyen ou Eleve","probabilite_avancement":"% + justification","risque_perte":"Faible ou Modere ou Eleve + justification"},"analyse_strategique":{"objectif_commercial_vendeur":"","objectif_explicite_prospect":"","objectif_implicite_prospect":"","maturite_bien_identifiee":"oui ou non + explication","call_adapte_funnel":"oui ou non + explication","opportunite_avancee":"oui ou non + explication","virage_call":"","virages_psychologiques":""},"structure_call":{"ouverture":{"note":0,"bien":"","mal":"","manque":""},"cadrage":{"note":0,"bien":"","mal":"","manque":""},"decouverte":{"note":0,"bien":"","mal":"","manque":""},"argumentation":{"note":0,"bien":"","mal":"","manque":""},"objections":{"note":0,"bien":"","mal":"","manque":""},"closing":{"note":0,"bien":"","mal":"","manque":""}},"qualite_decouverte":{"niveau":"Superficielle ou Correcte ou Approfondie","explication":"","elements_identifies":[""],"elements_manquants":[""]},"spin":{"situation":"","problem":"","implication":"","need_payoff":"","verdict_spin":""},"argumentation_valeur":{"adapte_profil_prestataire":"oui ou non + comment","vend_roi_ou_fonctionnalites":"","lien_enjeux_prospect":"","defense_valeur_plateforme":""},"objections":[{"objection":"","type":"Explicite ou Implicite","signification_reelle":"","reponse_commerciale":"","evaluation":"note sur 5","mieux_faire":""}],"gestion_prix":{"moment_annonce":"","terrain_prepare":"","valeur_avant_prix":"","prix_assume_ou_subi":"","perception_roi_prospect":""},"scores":{"qualification":{"note":0,"positif":"","amelioration":"","exemple":""},"decouverte_besoins":{"note":0,"positif":"","amelioration":"","exemple":""},"pitch":{"note":0,"positif":"","amelioration":"","exemple":""},"objections":{"note":0,"positif":"","amelioration":"","exemple":""},"next_steps_urgence":{"note":0,"positif":"","amelioration":"","exemple":""}},"opportunites_manquees":[""],"reformulations":[{"situation":"","dit":"","aurait_du_dire":""}],"top3_coaching":["","",""],"a_surveiller":"","verdict":""}
+
+CALIBRAGE DES NOTES - OBLIGATOIRE :
+1-3 = Execution insuffisante. 4-5 = En dessous des attentes. 6-7 = Correct avec lacunes. 8-9 = Solide. 10 = Excellence rare.
+Ne pas sur-noter. Le RESULTAT FINAL (engagement obtenu, avancement dans le funnel) pese dans closing et next_steps.`
+
+const PROMPT_WB = `Tu es un expert en reconquete client, specialise dans les calls winback pour des plateformes de visibilite prestataires mariage.
+
+CONTEXTE METIER OBLIGATOIRE :
+- Le prospect est un ANCIEN CLIENT Mariages.net ayant resilie il y a moins de 6 mois
+- CATEGORIES PRESTATAIRES MARIAGES.NET (identifier parmi cette liste exacte, ou 'Autre' si inconnu) : Accessoires marié, Accessoires mariage, Animation mariage, Bijoux mariage, Bus mariage, Cadeaux invités mariage, Chapiteaux, Costumes mariage, Décoration mariage, Esthétique coiffure mariage, Faire part mariage, Fleurs mariage, Food Truck, Liste de mariage, Lune de miel, Musique mariage, Officiant, Organisation, Photo mariage, Robes de mariées, Robe cocktail, Soins beauté, Vidéo mariage, Vin et Spiritueux, Voiture mariage, Wedding cake
+- Il connait deja la plateforme et porte un historique emotionnel et commercial fort
+- Un winback ne se traite PAS comme un call New Business - l historique est le pivot de tout
+- Raisons de resiliation les plus frequentes : deception sur les leads, ROI percu insuffisant, hausse tarifaire, mauvaise experience relation, concurrent moins cher, changement de strategie du prestataire
+- La confiance est brisee - elle doit etre reconstruite AVANT de parler de re-signature
+- Philosophie : comprendre d abord, reconstruire ensuite, proposer en dernier - jamais l inverse
+- Re-signer via le prix seul sans reconstruction de valeur = erreur grave qui ne tient pas
+
+CRITERES D EVALUATION :
+1. Diagnostic du depart - BIEN: poser la question directement, ecouter sans se defendre, identifier la vraie raison (pas juste l excuse de surface). MAL: eviter le sujet, minimiser, se justifier immediatement.
+2. Gestion du passe & confiance - BIEN: reconnaitre les faits sans exces de culpabilite, montrer ce qui a change, valider les frustrations sans les amplifier. MAL: nier, promettre sans preuves, etre defensif.
+3. Offre adaptee - BIEN: proposer quelque chose de tangiblement different du contrat precedent. MAL: meme chose qu avant, remise pure sans changement de valeur.
+4. Objections liees au passe - BIEN: distinguer objection rationnelle vs emotionnelle, traiter avec preuves concretes. MAL: esquiver, sur-promettre, capituler.
+5. Closing & Next Steps - BIEN: engagement clair, next step date, ne pas partir sans suite concrete. MAL: fin floue, laisser le prospect seul dans le vide.
+
+JSON ATTENDU :
+{"commercial":"prenom","type_call":"winback","categorie_prestataire":"categorie exacte identifiee parmi la liste Mariages.net, ou Autre","nom_client":"nom identifie ou Inconnu","resume_executif":{"resume":"5-10 lignes","enjeu_reel":"","issue_call":"","ouverture_retour":"Faible ou Moyen ou Eleve","niveau_resistance":"Faible ou Moyen ou Eleve","probabilite_resignature":"% + justification","risque_echec":"Faible ou Modere ou Eleve + justification"},"analyse_strategique":{"objectif_commercial_vendeur":"","winback_vs_nb_bien_compris":"oui ou non + explication","historique_pris_en_compte":"oui ou non + comment","motif_depart_identifie":"","motif_profond":"","espace_confiance_reouvert":"oui ou non + comment","virage_call":"","virages_psychologiques":""},"structure_call":{"prise_contact":{"note":0,"bien":"","mal":"","manque":""},"reouverture_relation":{"note":0,"bien":"","mal":"","manque":""},"exploration_historique":{"note":0,"bien":"","mal":"","manque":""},"reevaluation_contexte":{"note":0,"bien":"","mal":"","manque":""},"reconstruction_valeur":{"note":0,"bien":"","mal":"","manque":""},"traitement_objections":{"note":0,"bien":"","mal":"","manque":""},"closing":{"note":0,"bien":"","mal":"","manque":""}},"historique_client":{"niveau_exploration":"Insuffisante ou Correcte ou Approfondie","explication":"","raisons_resiliation_identifiees":[""],"irritants_explores":[""],"zones_non_explorees":[""]},"spin_winback":{"situation":"","problem":"","implication":"","need_payoff":"","verdict":""},"reconstruction_valeur":{"repart_experience_passee":"","reconnait_historique":"","recrée_envie":"","angle_nouveau":"","verdict":""},"portrait_client":{"ouverture_retour":"","frustration_residuelle":"Faible ou Moderee ou Forte","niveau_confiance":"Faible ou Moyen ou Fort","sensibilite_prix":"Faible ou Moderee ou Forte","profil_type":"Decu ou Pragmatique ou Mefiant ou Opportuniste ou Encore attache ou Ferme","ce_qu_il_avait_besoin_d_entendre":"","ce_qu_il_ne_fallait_pas_faire":""},"objections":[{"objection":"","type":"Explicite ou Implicite ou Heritee du passe","signification_reelle":"","reponse_commerciale":"","evaluation":"note sur 5","mieux_faire":""}],"gestion_historique_negatif":{"reconnait_ou_esquive":"","minimise_frustrations":"","defend_trop_tot":"","ecoute_avant_repondre":"","verdict":""},"gestion_prix":{"moment_retour_prix":"","valeur_preparee_avant_prix":"","client_raisonne_en":"Cout ou Deception passee ou ROI","discours_tarifaire":"assume ou fragile","retour_via_prix_uniquement":"oui ou non"},"scores":{"diagnostic_depart":{"note":0,"positif":"","amelioration":"","exemple":""},"gestion_passe":{"note":0,"positif":"","amelioration":"","exemple":""},"offre_adaptee":{"note":0,"positif":"","amelioration":"","exemple":""},"objections_passe":{"note":0,"positif":"","amelioration":"","exemple":""},"closing_next_steps":{"note":0,"positif":"","amelioration":"","exemple":""}},"opportunites_manquees":[""],"reformulations":[{"situation":"","dit":"","aurait_du_dire":""}],"call_ideal":{"prise_contact":"","reouverture_relation":"","exploration_depart":"","reconnaissance_historique":"","reconstruction_valeur":"","reponse_objection_cle":"","closing_next_step":""},"top3_coaching":["","",""],"a_surveiller":"","verdict":""}
+
+CALIBRAGE DES NOTES - OBLIGATOIRE :
+1-3 = Aggrave la situation. 4-5 = Chance de reconquete compromise. 6-7 = Bases posees mais incomplete. 8-9 = Reconquete bien engagee. 10 = Excellence rare.
+Ne pas sur-noter. Diagnostic du depart et gestion historique negatif sont les criteres les plus discriminants. Un winback sans closing concret ne depasse pas 7.`;
+
+// ─── WEIGHTS & DIMS ────────────────────────────────────────────────────────
+const DIMS_RNW = [
+  {id:"decouverte",label:"Decouverte & Diagnostic"},
+  {id:"valeur",label:"Construction de Valeur"},
+  {id:"objections",label:"Gestion des Objections"},
+  {id:"closing",label:"Closing & Next Steps"},
+  {id:"posture",label:"Posture & Relation"},
+];
+const DIMS_AM = [
+  {id:"decouverte",label:"Decouverte"},
+  {id:"diagnostic_business",label:"Diagnostic Business"},
+  {id:"detection_risques",label:"Detection des Risques"},
+  {id:"creation_valeur",label:"Creation de Valeur"},
+  {id:"preparation_renouvellement",label:"Prep. Renouvellement"},
+];
+const DIMS_NB = [
+  {id:"qualification",label:"Qualification"},
+  {id:"decouverte_besoins",label:"Decouverte des besoins"},
+  {id:"pitch",label:"Pitch adapte au profil"},
+  {id:"objections",label:"Gestion des objections"},
+  {id:"next_steps_urgence",label:"Next Steps & Urgence"},
+];
+const DIMS_WB = [
+  {id:"diagnostic_depart",label:"Comprendre le depart"},
+  {id:"gestion_passe",label:"Gestion du passe & confiance"},
+  {id:"offre_adaptee",label:"Offre differente / adaptee"},
+  {id:"objections_passe",label:"Objections liees au passe"},
+  {id:"closing_next_steps",label:"Closing & Next Steps"},
+];
+const WEIGHTS_RNW = {objections:0.30,closing:0.25,valeur:0.20,decouverte:0.15,posture:0.10};
+const WEIGHTS_AM  = {detection_risques:0.30,diagnostic_business:0.25,creation_valeur:0.20,decouverte:0.15,preparation_renouvellement:0.10};
+const WEIGHTS_NB  = {qualification:0.20,decouverte_besoins:0.25,pitch:0.20,objections:0.20,next_steps_urgence:0.15};
+const WEIGHTS_WB  = {diagnostic_depart:0.25,gestion_passe:0.20,offre_adaptee:0.15,objections_passe:0.25,closing_next_steps:0.15};
+
+const CALL_TYPE_META = {
+  renouvellement: {
+    label:"Renouvellement",
+    managerPromptLabel:"renouvellement",
+    shortLabel:"RNW",
+    dims:DIMS_RNW,
+    weights:WEIGHTS_RNW,
+    prompt:PROMPT_RNW,
+    tabs:[{id:"vue",l:"Vue strategique"},{id:"scores",l:"Scores"},{id:"ref",l:"Reformulations"},{id:"coaching",l:"Coaching"},{id:"email",l:"Email"}],
+  },
+  suivi: {
+    label:"Account Management",
+    managerPromptLabel:"account management",
+    shortLabel:"AM",
+    dims:DIMS_AM,
+    weights:WEIGHTS_AM,
+    prompt:PROMPT_AM,
+    tabs:[{id:"vue",l:"Situation client"},{id:"signaux",l:"Signaux"},{id:"scores",l:"Scores"},{id:"ref",l:"Reformulations"},{id:"coaching",l:"Coaching"},{id:"email",l:"Email"}],
+  },
+  nb: {
+    label:"New Business",
+    managerPromptLabel:"new business",
+    shortLabel:"NB",
+    dims:DIMS_NB,
+    weights:WEIGHTS_NB,
+    prompt:PROMPT_NB,
+    tabs:[{id:"vue",l:"Analyse"},{id:"structure",l:"Structure & SPIN"},{id:"scores",l:"Scores"},{id:"ref",l:"Reformulations"},{id:"coaching",l:"Coaching"},{id:"email",l:"Email"}],
+  },
+  winback: {
+    label:"Winback",
+    managerPromptLabel:"winback",
+    shortLabel:"WB",
+    dims:DIMS_WB,
+    weights:WEIGHTS_WB,
+    prompt:PROMPT_WB,
+    tabs:[{id:"vue",l:"Analyse"},{id:"wb_structure",l:"Structure & SPIN"},{id:"scores",l:"Scores"},{id:"ref",l:"Reformulations"},{id:"coaching",l:"Coaching"},{id:"email",l:"Email"}],
+  },
+};
+
+const NAV_ITEMS = [
+  {s:"home",l:"Analyser"},
+  {s:"history",l:"Historique"},
+  {s:"patterns",l:"Patterns"},
+];
+
+const CALL_TYPE_OPTIONS = [
+  {id:"renouvellement",l:"Renouvellement",sub:"Renouvellement ou upsell"},
+  {id:"suivi",l:"Account Management",sub:"Service call / suivi de compte"},
+  {id:"nb",l:"New Business",sub:"Premier contact / decouverte"},
+  {id:"winback",l:"Winback",sub:"Client perdu depuis moins de 6 mois"},
+];
+
+const INPUT_MODE_OPTIONS = [
+  {id:"pdf",l:"PDF"},
+  {id:"text",l:"Texte"},
+];
+
+const CLIENT_TENURE_OPTIONS = ["Nouveau client","1 an","2 ans","3 ans","4 ans","5 ans et plus"];
+
+function getCallMeta(type) {
+  return CALL_TYPE_META[type] || CALL_TYPE_META.renouvellement;
+}
+
+function getCallLabel(type) {
+  return getCallMeta(type).label;
+}
+
+function getCallShortLabel(type) {
+  return getCallMeta(type).shortLabel;
+}
+
+function getManagerPromptCallLabel(type) {
+  return getCallMeta(type).managerPromptLabel;
+}
+
+function getCallTabs(type) {
+  return getCallMeta(type).tabs;
+}
+
+function getSystemPrompt(type) {
+  return getCallMeta(type).prompt;
+}
+
+function weightedScore(scores = {}, type) {
+  const { weights } = getCallMeta(type);
+  let total=0,wSum=0;
+  Object.entries(scores).forEach(([k,v])=>{const w=weights[k]||0;total+=(v.note||0)*w;wSum+=w;});
+  return wSum>0?Math.round(total/wSum):0;
+}
+
+function resolveCallType(result, fallback) {
+  return result?.type_call || fallback || "renouvellement";
+}
+
+function getResultSummary(result) {
+  return result?.resume || result?.resume_executif?.resume || "";
+}
+
+function getResultOutcome(result) {
+  if (result?.resultat_call && result.resultat_call !== "Inconnu") return result.resultat_call;
+  return result?.resume_executif?.issue_call || "";
+}
+
+function hasAnalysisInput({ inputMode, pdfB64, transcript }) {
+  return inputMode==="pdf" ? !!pdfB64 : !!transcript.trim();
+}
+
+function getAnalyzeButtonState({ inputMode, pdfB64, transcript, loading, hasApiKey }) {
+  const hasInput = hasAnalysisInput({ inputMode, pdfB64, transcript });
+  return {
+    hasInput,
+    disabled: loading || !hasInput || !hasApiKey,
+    label: !hasApiKey ? "Cle API requise" : !hasInput ? "Ajoute un PDF ou du texte" : "Analyser le call",
+  };
+}
+
+function isValidAnalysisEntry(entry) {
+  return Boolean(
+    entry &&
+    typeof entry==="object" &&
+    entry.id &&
+    entry.callType &&
+    entry.result &&
+    typeof entry.result==="object"
+  );
+}
+
+function mergeAnalyses(existing, imported) {
+  if (!Array.isArray(imported)) throw new Error("Format invalide (tableau attendu)");
+  const valid = imported.filter(isValidAnalysisEntry);
+  if (valid.length===0) throw new Error("Aucune analyse valide dans le fichier");
+  const existingIds = new Set(existing.map(a=>a.id));
+  const additions = valid.filter(a=>!existingIds.has(a.id));
+  const merged = [...existing, ...additions].sort((a,b)=>b.id-a.id);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+  return { merged, added: additions.length, validCount: valid.length };
+}
+
+function downloadTextFile({ filename, content, mimeType }) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ─── HELPERS ───────────────────────────────────────────────────────────────
+const sc = n => n>=8?"#4ade80":n>=6?"#facc15":n>=4?"#fb923c":"#f87171";
+const sl = n => n>=8?"Excellent":n>=6?"Correct":n>=4?"A travailler":"Insuffisant";
+const ss = o => ({fontFamily:"system-ui,-apple-system,sans-serif",...o});
+const pf = o => ({fontFamily:"Georgia,'Times New Roman',serif",...o});
+
+// ─── EXPORT HTML ──────────────────────────────────────────────────────────
+function generateReportHTML(entry) {
+  const r = entry.result;
+  const callType = resolveCallType(r, entry.callType);
+  const typeLabel = getCallLabel(callType);
+  const dims = getCallMeta(callType).dims;
+  const ws = weightedScore(r.scores, callType);
+  const scoreColor = ws>=8?"#4ade80":ws>=6?"#e8c97a":ws>=4?"#fb923c":"#f87171";
+
+  const row = (label, val) => !val?"":
+    `<div style="margin-bottom:14px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:2px;color:#888;margin-bottom:4px">${label}</div><div style="font-size:13px;line-height:1.7;color:#222">${val}</div></div>`;
+  const section = (title, color, content) =>
+    `<div style="background:#fff;border:1px solid #e8e8e8;border-radius:12px;padding:20px 24px;margin-bottom:16px;border-left:4px solid ${color}"><div style="font-size:10px;text-transform:uppercase;letter-spacing:2px;color:${color};margin-bottom:14px;font-weight:700">${title}</div>${content}</div>`;
+
+  const scoresHTML = dims.map(d=>{
+    const s=r.scores?.[d.id]; if(!s) return "";
+    const col=s.note>=8?"#22c55e":s.note>=6?"#ca8a04":s.note>=4?"#ea580c":"#dc2626";
+    return `<div style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid #f0f0f0">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-weight:600;font-size:13px">${d.label}</span>
+        <span style="font-size:20px;font-weight:800;color:${col}">${s.note}<span style="font-size:11px;color:#aaa">/10</span></span>
+      </div>
+      <div style="height:4px;background:#f0f0f0;border-radius:2px;margin-bottom:10px;overflow:hidden"><div style="height:100%;width:${s.note*10}%;background:${col};border-radius:2px"></div></div>
+      ${s.positif?`<div style="font-size:12px;color:#16a34a;margin-bottom:3px">+ ${s.positif}</div>`:""}
+      ${s.amelioration?`<div style="font-size:12px;color:#dc2626">- ${s.amelioration}</div>`:""}
+      ${s.exemple?`<div style="font-size:12px;color:#888;margin-top:4px;font-style:italic">Ex: ${s.exemple}</div>`:""}
+    </div>`;
+  }).join("");
+
+  const refsHTML = (r.reformulations||[]).map((rf,i)=>`
+    <div style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid #f0f0f0">
+      <div style="font-size:11px;font-weight:600;color:#666;margin-bottom:6px">Situation ${i+1} - ${rf.situation}</div>
+      <div style="background:#fff5f5;border-left:3px solid #f87171;padding:8px 12px;border-radius:4px;font-size:12px;margin-bottom:8px;color:#555"><span style="font-weight:600;color:#dc2626">Dit :</span> ${rf.dit}</div>
+      <div style="background:#f0fdf4;border-left:3px solid #4ade80;padding:8px 12px;border-radius:4px;font-size:12px;color:#555"><span style="font-weight:600;color:#16a34a">Aurait du dire :</span> ${rf.aurait_du_dire}</div>
+    </div>`).join("");
+
+  const oppsHTML = (r.opportunites_manquees||[]).map((o,i)=>
+    `<div style="display:flex;gap:12px;margin-bottom:10px"><div style="color:#ea580c;font-weight:700;font-size:15px;min-width:20px">${i+1}.</div><div style="font-size:13px;line-height:1.6;color:#333">${o}</div></div>`).join("");
+
+  const coachHTML = (r.top3_coaching||[]).map((p,i)=>
+    `<div style="display:flex;gap:12px;margin-bottom:12px"><div style="background:#1e3a5f;color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0">${i+1}</div><div style="font-size:13px;line-height:1.6;color:#333">${p}</div></div>`).join("");
+
+  return `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
+<title>Rapport - ${entry.am} - ${typeLabel} - ${entry.date}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,sans-serif;background:#f8f8f8;padding:32px 0}
+  @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}.no-print{display:none!important}}
+</style></head>
+<body>
+<div style="max-width:780px;margin:0 auto;padding:0 24px">
+  <div class="no-print" style="text-align:center;margin-bottom:24px">
+    <button onclick="window.print()" style="background:#1e3a5f;color:#fff;border:none;padding:10px 28px;border-radius:8px;font-size:14px;cursor:pointer;font-family:system-ui,sans-serif">Imprimer / Enregistrer en PDF</button>
+  </div>
+  <div style="background:#1e3a5f;color:#fff;border-radius:16px;padding:28px 32px;margin-bottom:24px">
+    <div style="font-size:10px;text-transform:uppercase;letter-spacing:3px;color:#8fafd4;margin-bottom:8px">Rapport de coaching · ${typeLabel}</div>
+    <div style="font-size:26px;font-weight:800;margin-bottom:4px">${entry.am}</div>
+    <div style="font-size:13px;color:#8fafd4;margin-bottom:20px">${entry.date}</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.1);border-radius:12px;padding:12px 20px">
+      <span style="font-size:32px;font-weight:900;color:${scoreColor}">${ws}</span><span style="font-size:14px;color:#8fafd4">/10</span>
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#8fafd4;margin-top:2px">Score global</div>
+    </div>
+  </div>
+  ${r.resume?section("Resume","#64748b",`<div style="font-size:13px;line-height:1.8;color:#333">${r.resume}</div>`):""}
+  ${r.resume_executif?section("Resume executif","#64748b",row("Resume",r.resume_executif.resume)+row("Issue du call",r.resume_executif.issue_call)+row("Probabilite",r.resume_executif.probabilite_avancement||r.resume_executif.probabilite_resignature)+row("Risque",r.resume_executif.risque_perte||r.resume_executif.risque_echec)):""}
+  ${scoresHTML?section("Scores","#2563eb",scoresHTML):""}
+  ${refsHTML?section("Reformulations","#7c3aed",refsHTML):""}
+  ${coachHTML?section("Top 3 coaching","#b45309",coachHTML+(r.a_surveiller?`<div style="margin-top:12px;padding:10px 14px;background:#fffbeb;border-radius:8px;font-size:12px;color:#92400e"><strong>A surveiller :</strong> ${r.a_surveiller}</div>`:"")):""}
+  ${oppsHTML?section("Opportunites manquees","#ea580c",oppsHTML):""}
+  ${r.verdict?section("Verdict","#0f766e",`<div style="font-size:14px;line-height:1.8;color:#333;font-style:italic">${r.verdict}</div>`):""}
+</div></body></html>`;
+}
+
+// ─── UI COMPONENTS ─────────────────────────────────────────────────────────
+function Card({children, left, style={}}) {
+  return <div style={{background:"#0f0f1a",border:"1px solid #1a1a2a",borderRadius:12,padding:"16px 20px",borderLeft:left?"3px solid "+left:undefined,...style}}>{children}</div>;
+}
+function SL({c="#6b6b7e",children}) {
+  return <div style={ss({fontSize:10,textTransform:"uppercase",letterSpacing:2,color:c,marginBottom:8})}>{children}</div>;
+}
+function Tab({active,onClick,children}) {
+  return <button onClick={onClick} style={{background:"none",border:"none",borderBottom:active?"2px solid #8b7355":"2px solid transparent",padding:"9px 13px",color:active?"#e8e4dc":"#6b6b7e",fontFamily:"system-ui,sans-serif",fontSize:12,marginBottom:-1,cursor:"pointer"}}>{children}</button>;
+}
+
+// ─── MAIN APP ──────────────────────────────────────────────────────────────
+function App() {
+  const [screen, setScreen] = useState("home");
+  const [callType, setCallType] = useState(null);
+  const [am, setAm] = useState(null);
+  const [inputMode, setInputMode] = useState("pdf");
+  const [transcript, setTranscript] = useState("");
+  const [fileName, setFileName] = useState(null);
+  const [contratDebut, setContratDebut] = useState("");
+  const [contratFin, setContratFin] = useState("");
+  const [contratValeur, setContratValeur] = useState("");
+  const [contratDevise, setContratDevise] = useState("HT");
+  const [contratAnciennete, setContratAnciennete] = useState("");
+  const [pdfB64, setPdfB64] = useState(null);
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [loadStep, setLoadStep] = useState("");
+  const [error, setError] = useState(null);
+  const [tab, setTab] = useState("vue");
+  const [emailTxt, setEmailTxt] = useState("");
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [emailCopied, setEmailCopied] = useState(false);
+  const [analyses, setAnalyses] = useState([]);
+  const [patAM, setPatAM] = useState(null);
+  const [patData, setPatData] = useState(null);
+  const [patLoading, setPatLoading] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [apiKey, setApiKey] = React.useState(()=>localStorage.getItem(API_STORAGE_KEY)||"");
+  const [viewingEntry, setViewingEntry] = useState(null);
+  const [fromHistory, setFromHistory] = useState(false);
+  const [importMsg, setImportMsg] = useState("");
+  const fileRef = useRef();
+
+  useEffect(() => { setAnalyses(loadAll()); }, []);
+
+  const persistApiKey = (value) => {
+    setApiKey(value);
+    if (value) localStorage.setItem(API_STORAGE_KEY, value);
+    else localStorage.removeItem(API_STORAGE_KEY);
+  };
+
+  const resetContractFields = () => {
+    setContratDebut(""); setContratFin(""); setContratValeur("");
+    setContratDevise("HT"); setContratAnciennete("");
+  };
+
+  const resetInputFields = () => {
+    setPdfB64(null); setFileName(null); setTranscript(""); setInputMode("pdf");
+  };
+
+  const resetCurrentView = () => {
+    setResult(null); setError(null); setEmailTxt(""); setEmailCopied(false);
+    setFromHistory(false); setViewingEntry(null);
+  };
+
+  const flashImportMessage = (message) => {
+    setImportMsg(message);
+    setTimeout(()=>setImportMsg(""), 4000);
+  };
+
+  const exportHistory = () => {
+    downloadTextFile({
+      filename:"callcoach-historique-"+new Date().toLocaleDateString("fr-FR").replace(/\//g,"-")+".json",
+      content:JSON.stringify(analyses, null, 2),
+      mimeType:"application/json",
+    });
+  };
+
+  const handleImportHistory = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const imported = JSON.parse(ev.target.result);
+        const existing = loadAll();
+        const { merged, added } = mergeAnalyses(existing, imported);
+        setAnalyses(merged);
+        flashImportMessage(added+" analyse(s) importee(s). Total : "+merged.length+".");
+      } catch (err) {
+        flashImportMessage("Erreur : "+err.message);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const onFile = (e) => {
+    e.preventDefault();
+    const f = e.dataTransfer?.files?.[0] || e.target.files?.[0];
+    if (f && f.type==="application/pdf") {
+      setFileName(f.name); setError(null);
+      const r = new FileReader();
+      r.onload = () => setPdfB64(r.result.split(",")[1]);
+      r.readAsDataURL(f);
+    }
+  };
+
+  const goHome = () => {
+    setScreen("home"); setCallType(null); setAm(null);
+    resetCurrentView(); resetInputFields(); resetContractFields();
+  };
+
+  const exportHTML = () => {
+    const entry = viewingEntry || {result,callType,am,date:new Date().toLocaleDateString("fr-FR")};
+    downloadTextFile({
+      filename:"rapport-"+(entry.am||"coaching")+"-"+(entry.date||"").replace(/\//g,"-")+".html",
+      content:generateReportHTML(entry),
+      mimeType:"text/html;charset=utf-8",
+    });
+  };
+
+  const genEmail = async (res, amName) => {
+    const trimmedApiKey = apiKey.trim();
+    if (!trimmedApiKey) {
+      setEmailTxt("Ajoute une cle API Anthropic pour generer l email.");
+      return;
+    }
+    setEmailLoading(true); setEmailTxt("");
+    try {
+      const scores = Object.entries(res.scores||{}).map(([k,v])=>k+"="+v.note).join(",");
+      const top3 = (res.top3_coaching||[]).join(" | ");
+      const opps = (res.opportunites_manquees||[]).slice(0,2).join("; ");
+      const amPart = amName&&amName!=="Neutre"?"Commercial: "+amName+". ":"";
+      const catPart = res.categorie_prestataire?"Categorie prestataire: "+res.categorie_prestataire+". ":"";
+      const nomPart = (res.nom_client||res.nom_prospect)?"Nom client: "+(res.nom_client||res.nom_prospect)+". ":"";
+      const summary = getResultSummary(res);
+      const outcome = getResultOutcome(res);
+      const resPart = outcome?"Resultat du call: "+outcome+". ":"";
+      const entry = viewingEntry;
+      const contratPart = entry?.contrat?.valeur?"Valeur contrat: "+entry.contrat.valeur+" "+entry.contrat.devise+". ":"";
+      const ancPart = entry?.contrat?.anciennete?"Anciennete client: "+entry.contrat.anciennete+". ":"";
+      const prompt = "Tu es manager chez Mariages.net. Redige un email de feedback pour un call de "+getManagerPromptCallLabel(res.type_call)+". "+amPart+catPart+nomPart+resPart+contratPart+ancPart+"Resume: "+summary+". Scores: "+scores+". Top coaching: "+top3+". Opportunites: "+opps+". Verdict: "+res.verdict+". Consignes: 1re personne, naturel, direct, bienveillant, pas corporate, 3-4 paragraphes (positif / a travailler / 1-2 actions concretes), commence directement sans formule de politesse, termine par une phrase courte d encouragement, 150-220 mots max, pas de scores chiffres, en francais, semble redige par un humain.";
+      const data = await (await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":trimmedApiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:800,messages:[{role:"user",content:prompt}]})})).json();
+      if(data.error) throw new Error(data.error.message);
+      setEmailTxt(data.content.map(i=>i.text||"").join("").trim());
+    } catch(err){setEmailTxt("Erreur : "+err.message);}
+    finally{setEmailLoading(false);}
+  };
+
+  const analyze = async () => {
+    const trimmedApiKey = apiKey.trim();
+    if (!trimmedApiKey) {
+      setError("Ajoute une cle API Anthropic pour lancer l analyse.");
+      return;
+    }
+    setLoading(true); setError(null); setResult(null); setEmailTxt("");
+    try {
+      const contratCtx = (contratDebut||contratFin||contratValeur||contratAnciennete)?"\n\nCONTEXTE CONTRAT (essentiel pour l analyse) :"+(contratDebut?" Debut contrat: "+contratDebut+".":"")+(contratFin?" Fin contrat: "+contratFin+". Aujourd hui: "+new Date().toLocaleDateString("fr-FR")+".":"")+(contratValeur?" Valeur: "+contratValeur+" "+contratDevise+".":"")+(contratAnciennete?" Anciennete client: "+contratAnciennete+".":""):"";
+      let messages;
+      if(inputMode==="pdf"){
+        setLoadStep("Lecture du PDF...");
+        messages=[{role:"user",content:[{type:"document",source:{type:"base64",media_type:"application/pdf",data:pdfB64}},{type:"text",text:"Analyse cette transcription selon les instructions."+contratCtx}]}];
+      } else {
+        messages=[{role:"user",content:"Transcription du call :\n\n"+transcript+contratCtx}];
+      }
+      setLoadStep("Analyse en cours...");
+      const data = await (await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":trimmedApiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:16000,system:getSystemPrompt(callType),messages})})).json();
+      if(data.error) throw new Error(data.error.message);
+      const text = data.content.map(i=>i.text||"").join("");
+      const a=text.indexOf("{"),b=text.lastIndexOf("}");
+      if(a===-1||b===-1) throw new Error("Reponse inattendue.");
+      const parsed = JSON.parse(text.slice(a,b+1));
+      const entry = {id:Date.now(),date:new Date().toLocaleDateString("fr-FR"),am:am||"Neutre",callType,fileName:fileName||"",contrat:{debut:contratDebut,fin:contratFin,valeur:contratValeur,devise:contratDevise,anciennete:contratAnciennete},result:parsed};
+      const updated = saveEntry(entry);
+      setAnalyses(updated);
+      setResult(parsed); setTab("vue"); setViewingEntry(entry); setFromHistory(false); setScreen("result");
+      genEmail(parsed, am);
+    } catch(err){setError("Erreur lors de l analyse. "+(err.message||""));}
+    finally{setLoading(false); setLoadStep("");}
+  };
+
+  const genPatterns = async (amName) => {
+    const calls = analyses.filter(a=>a.am===amName);
+    if(calls.length<2) return;
+    const trimmedApiKey = apiKey.trim();
+    if (!trimmedApiKey) {
+      setPatData({error:"Ajoute une cle API Anthropic pour generer les patterns."});
+      return;
+    }
+    setPatLoading(true); setPatData(null);
+    try {
+      const dataStr = calls.map((a,i)=>{
+        const avg=weightedScore(a.result.scores,a.callType);
+        const cat = a.result?.categorie_prestataire||""; const nom = a.result?.nom_client||a.result?.nom_prospect||""; return "Call "+(i+1)+" ("+a.date+", "+a.callType+(cat?", "+cat:"")+(nom?", client: "+nom:"")+", anciennete: "+(a.contrat?.anciennete||"nc")+"): score="+avg+"/10, details="+Object.entries(a.result.scores||{}).map(([k,v])=>k+"="+v.note).join(",")+", coaching=["+(a.result.top3_coaching||[]).join("|")+"], resultat="+(a.result.resultat_call||a.result.resume_executif?.issue_call||"nc")+"]";
+      }).join("\n");
+      const prompt = "Tu es expert en coaching commercial specialise dans les renouvellements B2B pour prestataires mariage (Mariages.net). Voici l historique de "+calls.length+" calls de "+amName+" (types: "+[...new Set(calls.map(a=>a.callType))].join(", ")+"). Analyse les patterns par type de call si pertinent. \\n\\n"+dataStr+"\\n\\nIdentifie les patterns recurrents. Retourne UNIQUEMENT un JSON valide:\\n{\"synthese\":\"profil global en 2-3 phrases\",\"points_forts_recurrents\":[\"pattern 1\",\"pattern 2\"],\"axes_faibles_recurrents\":[\"axe 1\",\"axe 2\"],\"evolution\":\"tendance avec evidence\",\"focus_coaching\":[\"priorite 1 pour les prochaines semaines\",\"priorite 2\"],\"message_manager\":\"message personnalise de coaching base sur les patterns\"}";
+      const data = await (await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":trimmedApiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:2000,messages:[{role:"user",content:prompt}]})})).json();
+      if(data.error) throw new Error(data.error.message);
+      const text=data.content.map(i=>i.text||"").join("");
+      const a=text.indexOf("{"),b=text.lastIndexOf("}");
+      setPatData(JSON.parse(text.slice(a,b+1)));
+    } catch(err){setPatData({error:err.message});}
+    finally{setPatLoading(false);}
+  };
+
+  const handleDelete = (id) => {
+    const updated = deleteEntry(id);
+    setAnalyses(updated); setConfirmDelete(null);
+  };
+
+  const amStats = AMS.map(name=>{
+    const calls=analyses.filter(a=>a.am===name);
+    if(!calls.length) return null;
+    const avg=Math.round(calls.reduce((s,a)=>s+weightedScore(a.result.scores,a.callType),0)/calls.length);
+    return {name,count:calls.length,avg,lastDate:calls[0].date,lastType:calls[0].callType};
+  }).filter(Boolean).sort((a,b)=>(b.avg||0)-(a.avg||0));
+
+  const activeCallType = resolveCallType(result, callType);
+  const resultSummary = getResultSummary(result);
+  const resultOutcome = getResultOutcome(result);
+  const dims = getCallMeta(activeCallType).dims;
+  const gScore = result?.scores?weightedScore(result.scores,activeCallType):null;
+  const tabs2 = getCallTabs(activeCallType);
+  const hasApiKey = !!apiKey.trim();
+  const analyzeButton = getAnalyzeButtonState({ inputMode, pdfB64, transcript, loading, hasApiKey });
+
+  return (
+    <div style={{minHeight:"100vh",background:"#0a0a0f",color:"#e8e4dc"}}>
+
+      {/* NAV */}
+      <div style={{borderBottom:"1px solid #1e1e2e",padding:"14px 28px"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,flexWrap:"wrap"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{width:28,height:28,borderRadius:"50%",border:"2px solid #8b7355",display:"flex",alignItems:"center",justifyContent:"center",color:"#8b7355",fontSize:12}}>C</div>
+            <div>
+              <div style={pf({fontSize:17,fontWeight:700})}>Call Coach</div>
+              <div style={ss({fontSize:10,color:"#5a5a6e",letterSpacing:2,textTransform:"uppercase"})}>Mariages.net</div>
+            </div>
+          </div>
+
+          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
+            {NAV_ITEMS.map(v=>(
+              <button key={v.s} onClick={()=>{
+                if(v.s==="home"){ goHome(); return; }
+                setScreen(v.s);
+              }} style={{padding:"6px 14px",borderRadius:8,border:"none",background:screen===v.s?"#1a1208":"none",color:screen===v.s?"#e8c97a":"#6b6b7e",fontFamily:"system-ui,sans-serif",fontSize:12,fontWeight:screen===v.s?600:400}}>
+                {v.l}{v.s==="history"&&analyses.length?" ("+analyses.length+")":""}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {!hasApiKey ? (
+          <div style={{background:"#1a0808",border:"1px solid #f87171",borderRadius:10,padding:"12px 16px",marginTop:14,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+            <span style={{fontSize:12,color:"#f87171",flex:1,minWidth:220}}>Cle API Anthropic requise pour analyser et generer les patterns.</span>
+            <input value={apiKey} onChange={e=>persistApiKey(e.target.value)}
+              placeholder="sk-ant-..." type="password"
+              style={{padding:"6px 12px",background:"#0a0a0f",border:"1px solid #2a2a3e",borderRadius:8,color:"#e8e4dc",fontFamily:"monospace",fontSize:12,width:280,maxWidth:"100%"}}/>
+          </div>
+        ) : (
+          <div style={{display:"flex",justifyContent:"flex-end",marginTop:10}}>
+            <button onClick={()=>persistApiKey("")} style={{background:"none",border:"none",color:"#3a3a4e",fontSize:11,fontFamily:"system-ui,sans-serif",cursor:"pointer"}}>
+              Effacer la cle API
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div style={{maxWidth:840,margin:"0 auto",padding:"32px 20px"}}>
+
+        {/* HOME */}
+        {screen==="home" && (
+          <div className="fi">
+            <div style={pf({fontSize:26,fontWeight:900,marginBottom:6})}>Quel type de call <span style={{color:"#8b7355"}}>analyser ?</span></div>
+            <p style={ss({color:"#6b6b7e",fontSize:13,marginBottom:28})}>Le prompt s adapte automatiquement.</p>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,maxWidth:520}}>
+              {CALL_TYPE_OPTIONS.map(t=>(
+                <button key={t.id} onClick={()=>{setCallType(t.id);setScreen("am");}} style={{background:"#0f0f1a",border:"1px solid #2a2a3e",borderRadius:14,padding:"24px 20px",textAlign:"left",color:"#e8e4dc"}}>
+                  <div style={pf({fontSize:16,fontWeight:700,marginBottom:5})}>{t.l}</div>
+                  <div style={ss({fontSize:12,color:"#6b6b7e"})}>{t.sub}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* AM SELECT */}
+        {screen==="am" && (
+          <div className="fi">
+            <button onClick={()=>setScreen("home")} style={{background:"none",border:"none",color:"#6b6b7e",fontSize:12,fontFamily:"system-ui,sans-serif",marginBottom:24}}>Retour</button>
+            <div style={pf({fontSize:24,fontWeight:900,marginBottom:6})}>Pour quel AM <span style={{color:"#8b7355"}}>ce call ?</span></div>
+            <p style={ss({color:"#6b6b7e",fontSize:13,marginBottom:22})}>Permet de suivre les patterns dans le temps.</p>
+            <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:32}}>
+              {AMS.map(name=>(
+                <button key={name} onClick={()=>setAm(name)} style={{padding:"8px 18px",borderRadius:20,border:"1px solid",borderColor:am===name?"#8b7355":"#2a2a3e",background:am===name?"#1a1208":"none",color:am===name?"#e8c97a":"#7a7a8e",fontFamily:"system-ui,sans-serif",fontSize:13,fontWeight:am===name?600:400}}>
+                  {name}
+                </button>
+              ))}
+            </div>
+            {am && <button onClick={()=>setScreen("upload")} style={{padding:"10px 28px",background:"#8b7355",border:"none",borderRadius:8,color:"#fff0d8",fontFamily:"system-ui,sans-serif",fontSize:14,fontWeight:600}}>Continuer avec {am} →</button>}
+          </div>
+        )}
+
+        {/* UPLOAD */}
+        {screen==="upload" && (
+          <div className="fi">
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:24}}>
+              <button onClick={()=>{resetInputFields(); resetContractFields(); setScreen("am");}} style={{background:"none",border:"none",color:"#6b6b7e",fontSize:12,fontFamily:"system-ui,sans-serif"}}>Retour</button>
+              <div style={{width:1,height:12,background:"#2a2a3e"}}/>
+              <div style={ss({fontSize:11,color:"#8b7355",textTransform:"uppercase",letterSpacing:2})}>{getCallLabel(callType)} · {am}</div>
+            </div>
+            <div style={pf({fontSize:22,fontWeight:900,marginBottom:20})}>Importe la <span style={{color:"#8b7355"}}>transcription.</span></div>
+            <div style={{display:"flex",gap:8,marginBottom:16}}>
+              {INPUT_MODE_OPTIONS.map(m=>(
+                <button key={m.id} onClick={()=>setInputMode(m.id)} style={{padding:"6px 16px",borderRadius:8,border:"1px solid",borderColor:inputMode===m.id?"#8b7355":"#2a2a3e",background:inputMode===m.id?"#1a1208":"none",color:inputMode===m.id?"#e8c97a":"#6b6b7e",fontFamily:"system-ui,sans-serif",fontSize:13,fontWeight:600}}>
+                  {m.l}
+                </button>
+              ))}
+            </div>
+            {inputMode==="pdf" && (
+              <div onClick={()=>fileRef.current.click()} onDrop={onFile} onDragOver={e=>e.preventDefault()}
+                style={{border:"2px dashed",borderColor:pdfB64?"#8b7355":"#2a2a3e",borderRadius:12,padding:"36px 24px",textAlign:"center",cursor:"pointer",background:pdfB64?"#0f0e08":"#0f0f1a",marginBottom:16}}>
+                <input ref={fileRef} type="file" accept="application/pdf" style={{display:"none"}} onChange={onFile}/>
+                {pdfB64
+                  ? <><div style={ss({color:"#e8c97a",fontSize:14,fontWeight:600})}>{fileName}</div><div style={ss({color:"#6b6b7e",fontSize:11,marginTop:4})}>Cliquer pour changer</div></>
+                  : <div style={ss({color:"#9a9aae",fontSize:14})}>Glisse ton PDF ici ou clique</div>}
+              </div>
+            )}
+            {pdfB64&&inputMode==="pdf"&&(
+              <button onClick={()=>{setPdfB64(null);setFileName(null);}} style={{marginTop:8,padding:"5px 14px",background:"none",border:"1px solid #2a2a3e",borderRadius:8,color:"#6b6b7e",fontFamily:"system-ui,sans-serif",fontSize:12,display:"flex",alignItems:"center",gap:6}}>
+                <span style={{fontSize:14}}>×</span> Annuler
+              </button>
+            )}
+            {inputMode==="text"&&(
+              <textarea value={transcript} onChange={e=>setTranscript(e.target.value)} placeholder="Colle ici la transcription du call..."
+                style={{width:"100%",height:200,background:"#0f0f1a",border:"1px solid #2a2a3e",borderRadius:12,padding:"14px 16px",color:"#e8e4dc",fontSize:13,fontFamily:"system-ui,sans-serif",lineHeight:1.7,resize:"vertical",marginBottom:16}}/>
+            )}
+            {error&&<div style={ss({marginBottom:14,padding:"9px 14px",background:"#1a0a0a",borderRadius:8,color:"#f87171",fontSize:13,border:"1px solid #3a1a1a"})}>{error}</div>}
+
+            {/* Contexte contrat */}
+            <div style={{background:"#0f0f1a",border:"1px solid #1a1a2a",borderRadius:12,padding:"16px 18px",marginBottom:16}}>
+              <div style={ss({fontSize:10,textTransform:"uppercase",letterSpacing:2,color:"#6b6b7e",marginBottom:12})}>Contexte contrat <span style={{color:"#3a3a4e"}}>(optionnel mais recommandé)</span></div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                <div>
+                  <div style={ss({fontSize:11,color:"#6b6b7e",marginBottom:4})}>Date de début</div>
+                  <input type="date" value={contratDebut} onChange={e=>setContratDebut(e.target.value)}
+                    style={{width:"100%",background:"#0a0a0f",border:"1px solid #2a2a3e",borderRadius:8,padding:"7px 10px",color:"#e8e4dc",fontSize:13,fontFamily:"system-ui,sans-serif"}}/>
+                </div>
+                <div>
+                  <div style={ss({fontSize:11,color:"#6b6b7e",marginBottom:4})}>Date de fin</div>
+                  <input type="date" value={contratFin} onChange={e=>setContratFin(e.target.value)}
+                    style={{width:"100%",background:"#0a0a0f",border:"1px solid #2a2a3e",borderRadius:8,padding:"7px 10px",color:"#e8e4dc",fontSize:13,fontFamily:"system-ui,sans-serif"}}/>
+                </div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:10}}>
+                <div>
+                  <div style={ss({fontSize:11,color:"#6b6b7e",marginBottom:4})}>Valeur du contrat</div>
+                  <input type="number" value={contratValeur} onChange={e=>setContratValeur(e.target.value)} placeholder="ex: 1200"
+                    style={{width:"100%",background:"#0a0a0f",border:"1px solid #2a2a3e",borderRadius:8,padding:"7px 10px",color:"#e8e4dc",fontSize:13,fontFamily:"system-ui,sans-serif"}}/>
+                </div>
+                <div>
+                  <div style={ss({fontSize:11,color:"#6b6b7e",marginBottom:4})}>Taxe</div>
+                  <select value={contratDevise} onChange={e=>setContratDevise(e.target.value)}
+                    style={{background:"#0a0a0f",border:"1px solid #2a2a3e",borderRadius:8,padding:"7px 10px",color:"#e8e4dc",fontSize:13,fontFamily:"system-ui,sans-serif"}}>
+                    <option>HT</option>
+                    <option>TTC</option>
+                  </select>
+                </div>
+                <div>
+                  <div style={ss({fontSize:11,color:"#6b6b7e",marginBottom:4})}>Ancienneté client</div>
+                  <select value={contratAnciennete} onChange={e=>setContratAnciennete(e.target.value)}
+                    style={{width:"100%",background:"#0a0a0f",border:"1px solid #2a2a3e",borderRadius:8,padding:"7px 10px",color:"#e8e4dc",fontSize:13,fontFamily:"system-ui,sans-serif"}}>
+                    <option value="">-</option>
+                    {CLIENT_TENURE_OPTIONS.map(option=><option key={option}>{option}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <button onClick={analyze} disabled={analyzeButton.disabled}
+              style={{padding:"11px 28px",background:analyzeButton.disabled?"#1e1e2e":"#8b7355",border:"none",borderRadius:8,color:analyzeButton.disabled?"#4a4a5e":"#fff0d8",fontSize:13,fontFamily:"system-ui,sans-serif",fontWeight:600,display:"flex",alignItems:"center",gap:10,cursor:analyzeButton.disabled?"not-allowed":"pointer"}}>
+              {loading?<><span className="pu">◎</span> {loadStep}</>:analyzeButton.label}
+            </button>
+          </div>
+        )}
+
+        {/* RESULT */}
+        {screen==="result" && result && (
+          <div className="fi">
+            {/* Barre actions */}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18,flexWrap:"wrap",gap:10}}>
+              <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                {fromHistory&&(
+                  <button onClick={()=>{setScreen("history");setFromHistory(false);setViewingEntry(null);}}
+                    style={{padding:"6px 14px",background:"none",border:"1px solid #2a2a3e",borderRadius:8,color:"#8b7355",fontFamily:"system-ui,sans-serif",fontSize:12,fontWeight:600}}>
+                    ← Historique
+                  </button>
+                )}
+              </div>
+              <button onClick={exportHTML} style={{padding:"6px 16px",background:"#1a1208",border:"1px solid #8b7355",borderRadius:8,color:"#e8c97a",fontFamily:"system-ui,sans-serif",fontSize:12,fontWeight:600}}>
+                Exporter HTML
+              </button>
+            </div>
+
+            {/* Header rapport */}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20,flexWrap:"wrap",gap:14}}>
+              <div>
+                <div style={ss({fontSize:10,color:"#6b6b7e",textTransform:"uppercase",letterSpacing:2,marginBottom:6})}>{getCallLabel(activeCallType)} · {am}</div>
+                {(result.nom_client||result.nom_prospect||result.categorie_prestataire)&&(
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:6}}>
+                    {(result.nom_client||result.nom_prospect)&&<span style={ss({fontSize:12,padding:"3px 10px",borderRadius:20,background:"#1a1208",color:"#e8c97a",border:"1px solid #3a2a10"})}>{result.nom_client||result.nom_prospect}</span>}
+                    {result.categorie_prestataire&&<span style={ss({fontSize:12,padding:"3px 10px",borderRadius:20,background:"#0f1a1a",color:"#4ade80",border:"1px solid #1a3a1a"})}>{result.categorie_prestataire}</span>}
+                    {resultOutcome&&<span style={ss({fontSize:12,padding:"3px 10px",borderRadius:20,background:resultOutcome==="Signe"?"#0a1a0a":"#1a0a0a",color:resultOutcome==="Signe"?"#4ade80":"#f87171",border:"1px solid "+(resultOutcome==="Signe"?"#1a3a1a":"#3a1a1a")})}>{resultOutcome}</span>}
+                  </div>
+                )}
+                <div style={pf({fontSize:20,fontWeight:700,marginBottom:8})}>Rapport de coaching</div>
+                <div style={ss({color:"#9a9aae",fontSize:13,maxWidth:440,lineHeight:1.6})}>{resultSummary}</div>
+              </div>
+              <div style={{textAlign:"center",background:"#0f0f1a",border:"2px solid "+sc(gScore),borderRadius:12,padding:"14px 22px"}}>
+                <div style={pf({fontSize:40,fontWeight:900,color:sc(gScore),lineHeight:1})}>{gScore}</div>
+                <div style={ss({fontSize:10,color:"#6b6b7e",textTransform:"uppercase",letterSpacing:2,marginTop:3})}>/ 10</div>
+                <div style={ss({fontSize:11,color:sc(gScore),marginTop:5,fontWeight:600})}>{sl(gScore)}</div>
+              </div>
+            </div>
+
+            {(result.niveau_qualite||result.risque_churn||result.probabilite_renouvellement)&&(
+              <div style={{display:"flex",gap:8,marginBottom:18,flexWrap:"wrap"}}>
+                {result.niveau_qualite&&<div style={ss({fontSize:11,padding:"4px 12px",borderRadius:20,border:"1px solid #2a2a3e",color:"#c8c4bc"})}>{result.niveau_qualite}</div>}
+                {result.risque_churn&&<div style={ss({fontSize:11,padding:"4px 12px",borderRadius:20,border:"1px solid #2a2a3e",color:result.risque_churn.startsWith("Eleve")?"#f87171":result.risque_churn.startsWith("Modere")?"#fb923c":"#4ade80"})}>Churn : {result.risque_churn}</div>}
+                {result.probabilite_renouvellement&&<div style={ss({fontSize:11,padding:"4px 12px",borderRadius:20,border:"1px solid #2a2a3e",color:"#4ade80"})}>{result.probabilite_renouvellement}</div>}
+              </div>
+            )}
+
+            {/* TABS */}
+            <div style={{display:"flex",gap:0,marginBottom:22,borderBottom:"1px solid #1e1e2e",flexWrap:"wrap"}}>
+              {tabs2.map(t=><Tab key={t.id} active={tab===t.id} onClick={()=>setTab(t.id)}>{t.l}</Tab>)}
+            </div>
+
+            {/* TAB: VUE - RNW */}
+            {tab==="vue"&&activeCallType==="renouvellement"&&(
+              <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                {[{l:"Enjeu reel",v:result.enjeu_reel,c:"#8b7355"},{l:"Rapport de force",v:result.rapport_de_force,c:"#a78bfa"},{l:"Probabilite renouvellement",v:result.probabilite_renouvellement,c:"#4ade80"}].map((it,i)=>it.v&&(
+                  <Card key={i} left={it.c}><SL c={it.c}>{it.l}</SL><div style={ss({fontSize:13,lineHeight:1.7,color:"#c8c4bc"})}>{it.v}</div></Card>
+                ))}
+                {result.opportunites_manquees&&<Card><SL c="#fb923c">Opportunites manquees</SL>{result.opportunites_manquees.map((o,i)=><div key={i} style={{display:"flex",gap:12,marginBottom:i<result.opportunites_manquees.length-1?10:0,paddingBottom:i<result.opportunites_manquees.length-1?10:0,borderBottom:i<result.opportunites_manquees.length-1?"1px solid #1a1a2a":"none"}}><div style={pf({color:"#fb923c",fontWeight:700,fontSize:15,minWidth:18})}>{i+1}</div><div style={ss({fontSize:13,lineHeight:1.6,color:"#b8b4ac"})}>{o}</div></div>)}</Card>}
+              </div>
+            )}
+
+            {/* TAB: VUE - AM */}
+            {tab==="vue"&&activeCallType==="suivi"&&result.situation_client&&(
+              <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                {Object.entries({Activite:result.situation_client.activite,"Satisfaction globale":result.situation_client.satisfaction_globale,"Resultats Mariages.net":result.situation_client.resultats_mariagesnet,"Autres sources":result.situation_client.autres_sources,"Dependance plateforme":result.situation_client.dependance,"Attentes implicites":result.situation_client.attentes_implicites}).map(([l,v],i)=>v&&<Card key={i} left="#8b7355"><SL c="#8b7355">{l}</SL><div style={ss({fontSize:13,lineHeight:1.7,color:"#c8c4bc"})}>{v}</div></Card>)}
+                {result.opportunites_manquees&&<Card><SL c="#fb923c">Opportunites manquees</SL>{result.opportunites_manquees.map((o,i)=><div key={i} style={{display:"flex",gap:12,marginBottom:i<result.opportunites_manquees.length-1?10:0}}><div style={pf({color:"#fb923c",fontWeight:700,fontSize:15,minWidth:18})}>{i+1}</div><div style={ss({fontSize:13,lineHeight:1.6,color:"#b8b4ac"})}>{o}</div></div>)}</Card>}
+              </div>
+            )}
+
+            {/* TAB: VUE - NB */}
+            {tab==="vue"&&activeCallType==="nb"&&(
+              <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                {result.resume_executif&&(
+                  <Card left="#8b7355">
+                    <SL c="#8b7355">Resume executif</SL>
+                    <div style={ss({fontSize:13,lineHeight:1.7,color:"#c8c4bc",marginBottom:12})}>{result.resume_executif.resume}</div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                      {[{l:"Issue du call",v:result.resume_executif.issue_call},{l:"Interet prospect",v:result.resume_executif.interet_prospect},{l:"Maturite prospect",v:result.resume_executif.maturite_prospect},{l:"Risque de perte",v:result.resume_executif.risque_perte},{l:"Probabilite avancement",v:result.resume_executif.probabilite_avancement,full:true}].map((it,i)=>it.v&&(
+                        <div key={i} style={{gridColumn:it.full?"1/-1":"auto",background:"#0a0a0f",borderRadius:8,padding:"8px 12px"}}>
+                          <div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#6b6b7e",marginBottom:3})}>{it.l}</div>
+                          <div style={ss({fontSize:12,color:"#c8c4bc"})}>{it.v}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                )}
+                {result.analyse_strategique&&(
+                  <Card left="#a78bfa">
+                    <SL c="#a78bfa">Analyse strategique</SL>
+                    {[{l:"Virage du call",v:result.analyse_strategique.virage_call},{l:"Virages psychologiques prospect",v:result.analyse_strategique.virages_psychologiques},{l:"Call adapte au funnel",v:result.analyse_strategique.call_adapte_funnel},{l:"Opportunite avancee",v:result.analyse_strategique.opportunite_avancee}].map((it,i)=>it.v&&(
+                      <div key={i} style={{marginBottom:10,paddingBottom:10,borderBottom:"1px solid #1a1a2a"}}>
+                        <div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#a78bfa",marginBottom:3})}>{it.l}</div>
+                        <div style={ss({fontSize:13,lineHeight:1.6,color:"#c8c4bc"})}>{it.v}</div>
+                      </div>
+                    ))}
+                  </Card>
+                )}
+                {result.spin&&(
+                  <Card left="#facc15">
+                    <SL c="#facc15">Analyse SPIN</SL>
+                    {[{l:"S - Situation",v:result.spin.situation},{l:"P - Problem",v:result.spin.problem},{l:"I - Implication",v:result.spin.implication},{l:"N - Need-Payoff",v:result.spin.need_payoff},{l:"Verdict SPIN",v:result.spin.verdict_spin}].map((it,i)=>it.v&&(
+                      <div key={i} style={{marginBottom:i<4?10:0,paddingBottom:i<4?10:0,borderBottom:i<4?"1px solid #1a1a2a":"none"}}>
+                        <div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#facc15",marginBottom:3})}>{it.l}</div>
+                        <div style={ss({fontSize:13,lineHeight:1.6,color:"#c8c4bc"})}>{it.v}</div>
+                      </div>
+                    ))}
+                  </Card>
+                )}
+                {result.gestion_prix&&(
+                  <Card left="#fb923c">
+                    <SL c="#fb923c">Gestion du prix</SL>
+                    {[{l:"Moment d annonce",v:result.gestion_prix.moment_annonce},{l:"Terrain prepare",v:result.gestion_prix.terrain_prepare},{l:"Valeur avant prix",v:result.gestion_prix.valeur_avant_prix},{l:"Prix assume ou subi",v:result.gestion_prix.prix_assume_ou_subi},{l:"Perception ROI prospect",v:result.gestion_prix.perception_roi_prospect}].map((it,i)=>it.v&&(
+                      <div key={i} style={{marginBottom:i<4?10:0,paddingBottom:i<4?10:0,borderBottom:i<4?"1px solid #1a1a2a":"none"}}>
+                        <div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#fb923c",marginBottom:3})}>{it.l}</div>
+                        <div style={ss({fontSize:13,lineHeight:1.6,color:"#c8c4bc"})}>{it.v}</div>
+                      </div>
+                    ))}
+                  </Card>
+                )}
+                {result.objections&&result.objections.length>0&&(
+                  <Card><SL c="#f87171">Objections</SL>
+                    {result.objections.map((o,i)=>(
+                      <div key={i} style={{marginBottom:i<result.objections.length-1?14:0,paddingBottom:i<result.objections.length-1?14:0,borderBottom:i<result.objections.length-1?"1px solid #1a1a2a":"none"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:6}}>
+                          <div style={ss({fontSize:13,fontStyle:"italic",color:"#c8c4bc"})}>"{o.objection}"</div>
+                          <div style={ss({fontSize:10,padding:"2px 8px",borderRadius:12,background:"#1a1a2a",color:o.type==="Implicite"?"#a78bfa":"#f87171",whiteSpace:"nowrap"})}>{o.type}</div>
+                        </div>
+                        <div style={ss({fontSize:11,color:"#6b6b7e",marginBottom:4})}>{o.signification_reelle}</div>
+                        <div style={{background:"#0a0a0f",borderRadius:8,padding:"8px 12px",borderLeft:"3px solid #4ade80"}}><div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#4ade80",marginBottom:3})}>Mieux faire</div><div style={ss({fontSize:12,lineHeight:1.5,color:"#a8c4a8"})}>{o.mieux_faire}</div></div>
+                      </div>
+                    ))}
+                  </Card>
+                )}
+                {result.opportunites_manquees&&<Card><SL c="#fb923c">Opportunites manquees</SL>{result.opportunites_manquees.map((o,i)=><div key={i} style={{display:"flex",gap:12,marginBottom:i<result.opportunites_manquees.length-1?10:0}}><div style={pf({color:"#fb923c",fontWeight:700,fontSize:15,minWidth:18})}>{i+1}</div><div style={ss({fontSize:13,lineHeight:1.6,color:"#b8b4ac"})}>{o}</div></div>)}</Card>}
+              </div>
+            )}
+
+            {/* TAB: VUE - WB */}
+            {tab==="vue"&&activeCallType==="winback"&&(
+              <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                {result.resume_executif&&(
+                  <Card left="#f87171">
+                    <SL c="#f87171">Resume executif</SL>
+                    <div style={ss({fontSize:13,lineHeight:1.7,color:"#c8c4bc",marginBottom:12})}>{result.resume_executif.resume}</div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                      {[{l:"Enjeu reel",v:result.resume_executif.enjeu_reel,full:true},{l:"Issue du call",v:result.resume_executif.issue_call},{l:"Ouverture au retour",v:result.resume_executif.ouverture_retour},{l:"Niveau de resistance",v:result.resume_executif.niveau_resistance},{l:"Risque echec",v:result.resume_executif.risque_echec},{l:"Probabilite re-signature",v:result.resume_executif.probabilite_resignature,full:true}].map((it,i)=>it.v&&(
+                        <div key={i} style={{gridColumn:it.full?"1/-1":"auto",background:"#0a0a0f",borderRadius:8,padding:"8px 12px"}}>
+                          <div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#6b6b7e",marginBottom:3})}>{it.l}</div>
+                          <div style={ss({fontSize:12,color:"#c8c4bc"})}>{it.v}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                )}
+                {result.analyse_strategique&&(
+                  <Card left="#a78bfa">
+                    <SL c="#a78bfa">Analyse strategique</SL>
+                    {[{l:"Winback traite comme winback (pas NB)",v:result.analyse_strategique.winback_vs_nb_bien_compris},{l:"Motif depart identifie",v:result.analyse_strategique.motif_depart_identifie},{l:"Motif profond cache",v:result.analyse_strategique.motif_profond},{l:"Espace de confiance reouvert",v:result.analyse_strategique.espace_confiance_reouvert},{l:"Virage du call",v:result.analyse_strategique.virage_call},{l:"Virages psychologiques",v:result.analyse_strategique.virages_psychologiques}].map((it,i)=>it.v&&(
+                      <div key={i} style={{marginBottom:i<5?10:0,paddingBottom:i<5?10:0,borderBottom:i<5?"1px solid #1a1a2a":"none"}}>
+                        <div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#a78bfa",marginBottom:3})}>{it.l}</div>
+                        <div style={ss({fontSize:13,lineHeight:1.6,color:"#c8c4bc"})}>{it.v}</div>
+                      </div>
+                    ))}
+                  </Card>
+                )}
+                {result.portrait_client&&(
+                  <Card left="#facc15">
+                    <SL c="#facc15">Portrait client</SL>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+                      {[{l:"Profil type",v:result.portrait_client.profil_type},{l:"Ouverture au retour",v:result.portrait_client.ouverture_retour},{l:"Frustration residuelle",v:result.portrait_client.frustration_residuelle},{l:"Sensibilite prix",v:result.portrait_client.sensibilite_prix}].map((it,i)=>it.v&&(
+                        <div key={i} style={{background:"#0a0a0f",borderRadius:8,padding:"8px 12px"}}>
+                          <div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#6b6b7e",marginBottom:3})}>{it.l}</div>
+                          <div style={ss({fontSize:12,color:"#c8c4bc"})}>{it.v}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {result.portrait_client.ce_qu_il_avait_besoin_d_entendre&&<div style={{background:"#0a0a0f",borderRadius:8,padding:"10px 12px",borderLeft:"3px solid #4ade80",marginBottom:8}}><div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#4ade80",marginBottom:4})}>Ce qu il avait besoin d entendre</div><div style={ss({fontSize:13,lineHeight:1.6,color:"#a8c4a8"})}>{result.portrait_client.ce_qu_il_avait_besoin_d_entendre}</div></div>}
+                    {result.portrait_client.ce_qu_il_ne_fallait_pas_faire&&<div style={{background:"#0a0a0f",borderRadius:8,padding:"10px 12px",borderLeft:"3px solid #f87171"}}><div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#f87171",marginBottom:4})}>Ce qu il ne fallait pas faire</div><div style={ss({fontSize:13,lineHeight:1.6,color:"#c4a8a8"})}>{result.portrait_client.ce_qu_il_ne_fallait_pas_faire}</div></div>}
+                  </Card>
+                )}
+                {result.objections&&result.objections.length>0&&(
+                  <Card><SL c="#f87171">Objections</SL>
+                    {result.objections.map((o,i)=>(
+                      <div key={i} style={{marginBottom:i<result.objections.length-1?14:0,paddingBottom:i<result.objections.length-1?14:0,borderBottom:i<result.objections.length-1?"1px solid #1a1a2a":"none"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:6}}>
+                          <div style={ss({fontSize:13,fontStyle:"italic",color:"#c8c4bc"})}>"{o.objection}"</div>
+                          <div style={ss({fontSize:10,padding:"2px 8px",borderRadius:12,background:"#1a1a2a",color:o.type==="Implicite"?"#a78bfa":o.type&&o.type.includes("passe")?"#facc15":"#f87171",whiteSpace:"nowrap"})}>{o.type}</div>
+                        </div>
+                        <div style={ss({fontSize:11,color:"#6b6b7e",marginBottom:6})}>{o.signification_reelle}</div>
+                        <div style={{background:"#0a0a0f",borderRadius:8,padding:"8px 12px",borderLeft:"3px solid #4ade80"}}><div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#4ade80",marginBottom:3})}>Mieux faire</div><div style={ss({fontSize:12,lineHeight:1.5,color:"#a8c4a8"})}>{o.mieux_faire}</div></div>
+                      </div>
+                    ))}
+                  </Card>
+                )}
+                {result.call_ideal&&(
+                  <Card left="#8b7355">
+                    <SL c="#8b7355">Call ideal</SL>
+                    {Object.entries({"Prise de contact":result.call_ideal.prise_contact,"Reouverture relation":result.call_ideal.reouverture_relation,"Exploration du depart":result.call_ideal.exploration_depart,"Reconnaissance historique":result.call_ideal.reconnaissance_historique,"Reconstruction valeur":result.call_ideal.reconstruction_valeur,"Reponse a l objection cle":result.call_ideal.reponse_objection_cle,"Closing / Next step":result.call_ideal.closing_next_step}).map(([label,v],i,arr)=>v&&(
+                      <div key={i} style={{marginBottom:i<arr.length-1?12:0,paddingBottom:i<arr.length-1?12:0,borderBottom:i<arr.length-1?"1px solid #1a1a2a":"none"}}>
+                        <div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#8b7355",marginBottom:4})}>{label}</div>
+                        <div style={ss({fontSize:13,lineHeight:1.7,color:"#e8e4dc",fontStyle:"italic"})}>"{v}"</div>
+                      </div>
+                    ))}
+                  </Card>
+                )}
+                {result.opportunites_manquees&&<Card><SL c="#fb923c">Opportunites manquees</SL>{result.opportunites_manquees.map((o,i)=><div key={i} style={{display:"flex",gap:12,marginBottom:i<result.opportunites_manquees.length-1?10:0}}><div style={pf({color:"#fb923c",fontWeight:700,fontSize:15,minWidth:18})}>{i+1}</div><div style={ss({fontSize:13,lineHeight:1.6,color:"#b8b4ac"})}>{o}</div></div>)}</Card>}
+              </div>
+            )}
+
+            {/* TAB: SIGNAUX (AM) */}
+            {tab==="signaux"&&result.signaux&&(
+              <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                {[{k:"positifs",l:"Signaux positifs",c:"#4ade80"},{k:"vigilance",l:"Zones de vigilance",c:"#facc15"},{k:"churn",l:"Risques de churn",c:"#f87171"}].map(({k,l,c})=>result.signaux[k]?.length>0&&(
+                  <Card key={k} left={c}><SL c={c}>{l}</SL>{result.signaux[k].map((s,i)=><div key={i} style={{display:"flex",gap:10,marginBottom:i<result.signaux[k].length-1?8:0}}><span style={{color:c,fontSize:8,marginTop:4}}>●</span><div style={ss({fontSize:13,lineHeight:1.6,color:"#b8b4ac"})}>{s}</div></div>)}</Card>
+                ))}
+                {result.top3_questions_manquantes&&<Card left="#a78bfa"><SL c="#a78bfa">Questions manquantes</SL>{result.top3_questions_manquantes.map((q,i)=><div key={i} style={{display:"flex",gap:12,marginBottom:i<2?8:0}}><div style={pf({color:"#a78bfa",fontWeight:700,fontSize:15,minWidth:18})}>{i+1}</div><div style={ss({fontSize:13,lineHeight:1.6,color:"#b8b4ac",fontStyle:"italic"})}>{q}</div></div>)}</Card>}
+              </div>
+            )}
+
+            {/* TAB: STRUCTURE - NB */}
+            {tab==="structure"&&activeCallType==="nb"&&(
+              <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                {result.structure_call&&(
+                  <Card>
+                    <SL>Structure du call</SL>
+                    {Object.entries({Ouverture:result.structure_call.ouverture,Cadrage:result.structure_call.cadrage,Decouverte:result.structure_call.decouverte,Argumentation:result.structure_call.argumentation,Objections:result.structure_call.objections,Closing:result.structure_call.closing}).map(([label,s],i)=>s&&(
+                      <div key={i} style={{marginBottom:i<5?14:0,paddingBottom:i<5?14:0,borderBottom:i<5?"1px solid #1a1a2a":"none"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                          <div style={ss({fontWeight:600,fontSize:13})}>{label}</div>
+                          <span style={pf({fontSize:18,fontWeight:700,color:sc(s.note)})}>{s.note}<span style={ss({fontSize:11,color:"#4a4a5e"})}>/10</span></span>
+                        </div>
+                        <div style={{height:3,background:"#1a1a2a",borderRadius:2,marginBottom:10,overflow:"hidden"}}><div style={{height:"100%",width:(s.note*10)+"%",background:sc(s.note),borderRadius:2}}/></div>
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+                          {s.bien&&<div style={{background:"#0a0a0f",borderRadius:8,padding:"8px 10px",borderLeft:"3px solid #4ade80"}}><div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:1,color:"#4ade80",marginBottom:3})}>Bien</div><div style={ss({fontSize:11,lineHeight:1.5,color:"#b8b4ac"})}>{s.bien}</div></div>}
+                          {s.mal&&<div style={{background:"#0a0a0f",borderRadius:8,padding:"8px 10px",borderLeft:"3px solid #f87171"}}><div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:1,color:"#f87171",marginBottom:3})}>Mal</div><div style={ss({fontSize:11,lineHeight:1.5,color:"#b8b4ac"})}>{s.mal}</div></div>}
+                          {s.manque&&<div style={{background:"#0a0a0f",borderRadius:8,padding:"8px 10px",borderLeft:"3px solid #facc15"}}><div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:1,color:"#facc15",marginBottom:3})}>Manque</div><div style={ss({fontSize:11,lineHeight:1.5,color:"#b8b4ac"})}>{s.manque}</div></div>}
+                        </div>
+                      </div>
+                    ))}
+                  </Card>
+                )}
+                {result.qualite_decouverte&&(
+                  <Card left="#4ade80">
+                    <SL c="#4ade80">Qualite de la decouverte</SL>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+                      <span style={ss({fontSize:13,fontWeight:600,color:"#4ade80"})}>{result.qualite_decouverte.niveau}</span>
+                      <span style={ss({fontSize:12,color:"#7a7a8e"})}>{result.qualite_decouverte.explication}</span>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                      {result.qualite_decouverte.elements_identifies?.length>0&&<div style={{background:"#0a0a0f",borderRadius:8,padding:"10px 12px",borderLeft:"3px solid #4ade80"}}><div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#4ade80",marginBottom:6})}>Identifies</div>{result.qualite_decouverte.elements_identifies.map((e,i)=><div key={i} style={ss({fontSize:12,color:"#b8b4ac",marginBottom:3})}>{e}</div>)}</div>}
+                      {result.qualite_decouverte.elements_manquants?.length>0&&<div style={{background:"#0a0a0f",borderRadius:8,padding:"10px 12px",borderLeft:"3px solid #fb923c"}}><div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#fb923c",marginBottom:6})}>Manquants</div>{result.qualite_decouverte.elements_manquants.map((e,i)=><div key={i} style={ss({fontSize:12,color:"#b8b4ac",marginBottom:3})}>{e}</div>)}</div>}
+                    </div>
+                  </Card>
+                )}
+                {result.argumentation_valeur&&(
+                  <Card left="#a78bfa">
+                    <SL c="#a78bfa">Argumentation & Valeur</SL>
+                    {Object.entries({"Vend ROI ou fonctionnalites":result.argumentation_valeur.vend_roi_ou_fonctionnalites||result.argumentation_valeur.vend_fonctionnalites_ou_valeur,"Adaptation au profil":result.argumentation_valeur.adapte_profil_prestataire||result.argumentation_valeur.adaptation_profil,"Lien avec enjeux prospect":result.argumentation_valeur.lien_enjeux_prospect,"Creation de projection":result.argumentation_valeur.creation_projection,"Defense valeur plateforme":result.argumentation_valeur.defense_valeur_plateforme}).map(([label,v],i)=>v&&(
+                      <div key={i} style={{marginBottom:i<4?8:0,paddingBottom:i<4?8:0,borderBottom:i<4?"1px solid #1a1a2a":"none"}}>
+                        <div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#a78bfa",marginBottom:2})}>{label}</div>
+                        <div style={ss({fontSize:12,lineHeight:1.5,color:"#c8c4bc"})}>{v}</div>
+                      </div>
+                    ))}
+                  </Card>
+                )}
+              </div>
+            )}
+
+            {/* TAB: STRUCTURE - WB */}
+            {tab==="wb_structure"&&activeCallType==="winback"&&(
+              <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                {result.structure_call&&(
+                  <Card>
+                    <SL>Structure du call winback</SL>
+                    {Object.entries({"Prise de contact":result.structure_call.prise_contact,"Reouverture relation":result.structure_call.reouverture_relation,"Exploration historique":result.structure_call.exploration_historique,"Reevaluation contexte":result.structure_call.reevaluation_contexte,"Reconstruction valeur":result.structure_call.reconstruction_valeur,"Traitement objections":result.structure_call.traitement_objections,"Closing":result.structure_call.closing}).map(([label,s],i,arr)=>s&&(
+                      <div key={i} style={{marginBottom:i<arr.length-1?14:0,paddingBottom:i<arr.length-1?14:0,borderBottom:i<arr.length-1?"1px solid #1a1a2a":"none"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                          <div style={ss({fontWeight:600,fontSize:13})}>{label}</div>
+                          <span style={pf({fontSize:18,fontWeight:700,color:sc(s.note)})}>{s.note}<span style={ss({fontSize:11,color:"#4a4a5e"})}>/10</span></span>
+                        </div>
+                        <div style={{height:3,background:"#1a1a2a",borderRadius:2,marginBottom:10,overflow:"hidden"}}><div style={{height:"100%",width:(s.note*10)+"%",background:sc(s.note),borderRadius:2}}/></div>
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+                          {s.bien&&<div style={{background:"#0a0a0f",borderRadius:8,padding:"8px 10px",borderLeft:"3px solid #4ade80"}}><div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:1,color:"#4ade80",marginBottom:3})}>Bien</div><div style={ss({fontSize:11,lineHeight:1.5,color:"#b8b4ac"})}>{s.bien}</div></div>}
+                          {s.mal&&<div style={{background:"#0a0a0f",borderRadius:8,padding:"8px 10px",borderLeft:"3px solid #f87171"}}><div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:1,color:"#f87171",marginBottom:3})}>Mal</div><div style={ss({fontSize:11,lineHeight:1.5,color:"#b8b4ac"})}>{s.mal}</div></div>}
+                          {s.manque&&<div style={{background:"#0a0a0f",borderRadius:8,padding:"8px 10px",borderLeft:"3px solid #facc15"}}><div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:1,color:"#facc15",marginBottom:3})}>Manque</div><div style={ss({fontSize:11,lineHeight:1.5,color:"#b8b4ac"})}>{s.manque}</div></div>}
+                        </div>
+                      </div>
+                    ))}
+                  </Card>
+                )}
+                {result.spin_winback&&(
+                  <Card left="#facc15">
+                    <SL c="#facc15">SPIN adapte au winback</SL>
+                    {[{l:"S - Situation depuis le depart",v:result.spin_winback.situation},{l:"P - Problemes identifies",v:result.spin_winback.problem},{l:"I - Consequences de ne plus etre sur Mariages.net",v:result.spin_winback.implication},{l:"N - Valeur verbalisee d un retour",v:result.spin_winback.need_payoff},{l:"Verdict SPIN",v:result.spin_winback.verdict}].map((it,i)=>it.v&&(
+                      <div key={i} style={{marginBottom:i<4?10:0,paddingBottom:i<4?10:0,borderBottom:i<4?"1px solid #1a1a2a":"none"}}>
+                        <div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#facc15",marginBottom:3})}>{it.l}</div>
+                        <div style={ss({fontSize:13,lineHeight:1.6,color:"#c8c4bc"})}>{it.v}</div>
+                      </div>
+                    ))}
+                  </Card>
+                )}
+                {result.historique_client&&(
+                  <Card left="#fb923c">
+                    <SL c="#fb923c">Exploration de l historique client</SL>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+                      <span style={ss({fontSize:13,fontWeight:600,color:"#fb923c"})}>{result.historique_client.niveau_exploration}</span>
+                      <span style={ss({fontSize:12,color:"#7a7a8e"})}>{result.historique_client.explication}</span>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                      {result.historique_client.raisons_resiliation_identifiees?.length>0&&<div style={{background:"#0a0a0f",borderRadius:8,padding:"10px 12px",borderLeft:"3px solid #fb923c"}}><div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#fb923c",marginBottom:6})}>Raisons identifiees</div>{result.historique_client.raisons_resiliation_identifiees.map((e,i)=><div key={i} style={ss({fontSize:12,color:"#b8b4ac",marginBottom:3})}>{e}</div>)}</div>}
+                      {result.historique_client.zones_non_explorees?.length>0&&<div style={{background:"#0a0a0f",borderRadius:8,padding:"10px 12px",borderLeft:"3px solid #f87171"}}><div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#f87171",marginBottom:6})}>Zones non explorees</div>{result.historique_client.zones_non_explorees.map((e,i)=><div key={i} style={ss({fontSize:12,color:"#b8b4ac",marginBottom:3})}>{e}</div>)}</div>}
+                    </div>
+                  </Card>
+                )}
+                {result.gestion_historique_negatif&&(
+                  <Card left="#f87171">
+                    <SL c="#f87171">Gestion de l historique negatif</SL>
+                    {[{l:"Reconnait ou esquive",v:result.gestion_historique_negatif.reconnait_ou_esquive},{l:"Minimise les frustrations",v:result.gestion_historique_negatif.minimise_frustrations},{l:"Se defend trop tot",v:result.gestion_historique_negatif.defend_trop_tot},{l:"Ecoute avant de repondre",v:result.gestion_historique_negatif.ecoute_avant_repondre},{l:"Verdict",v:result.gestion_historique_negatif.verdict}].map((it,i)=>it.v&&(
+                      <div key={i} style={{marginBottom:i<4?8:0,paddingBottom:i<4?8:0,borderBottom:i<4?"1px solid #1a1a2a":"none"}}>
+                        <div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#f87171",marginBottom:3})}>{it.l}</div>
+                        <div style={ss({fontSize:13,lineHeight:1.6,color:"#c8c4bc"})}>{it.v}</div>
+                      </div>
+                    ))}
+                  </Card>
+                )}
+                {result.reconstruction_valeur&&(
+                  <Card left="#4ade80">
+                    <SL c="#4ade80">Reconstruction de valeur</SL>
+                    {[{l:"Repart de l experience passee",v:result.reconstruction_valeur.repart_experience_passee},{l:"Reconnait l historique",v:result.reconstruction_valeur.reconnait_historique},{l:"Recree l envie",v:result.reconstruction_valeur.recree_envie||result.reconstruction_valeur["recrée_envie"]},{l:"Angle nouveau ou evolution",v:result.reconstruction_valeur.angle_nouveau},{l:"Verdict",v:result.reconstruction_valeur.verdict}].map((it,i)=>it.v&&(
+                      <div key={i} style={{marginBottom:i<4?8:0,paddingBottom:i<4?8:0,borderBottom:i<4?"1px solid #1a1a2a":"none"}}>
+                        <div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#4ade80",marginBottom:3})}>{it.l}</div>
+                        <div style={ss({fontSize:13,lineHeight:1.6,color:"#c8c4bc"})}>{it.v}</div>
+                      </div>
+                    ))}
+                  </Card>
+                )}
+                {result.gestion_prix&&(
+                  <Card left="#a78bfa">
+                    <SL c="#a78bfa">Gestion du prix et ROI</SL>
+                    {[{l:"Moment retour prix",v:result.gestion_prix.moment_retour_prix},{l:"Valeur preparee avant prix",v:result.gestion_prix.valeur_preparee_avant_prix},{l:"Client raisonne en",v:result.gestion_prix.client_raisonne_en},{l:"Discours tarifaire",v:result.gestion_prix.discours_tarifaire},{l:"Retour via prix uniquement",v:result.gestion_prix.retour_via_prix_uniquement}].map((it,i)=>it.v&&(
+                      <div key={i} style={{marginBottom:i<4?8:0,paddingBottom:i<4?8:0,borderBottom:i<4?"1px solid #1a1a2a":"none"}}>
+                        <div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#a78bfa",marginBottom:3})}>{it.l}</div>
+                        <div style={ss({fontSize:13,lineHeight:1.6,color:"#c8c4bc"})}>{it.v}</div>
+                      </div>
+                    ))}
+                  </Card>
+                )}
+              </div>
+            )}
+
+            {/* TAB: SCORES */}
+            {tab==="scores"&&(
+              <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                {dims.map((dim)=>{
+                  const s=result.scores?.[dim.id]; if(!s) return null;
+                  return (
+                    <div key={dim.id} style={{background:"#0f0f1a",border:"1px solid #1a1a2a",borderRadius:12,padding:"16px 20px"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:8}}>
+                        <div style={ss({fontWeight:600,fontSize:13})}>{dim.label}</div>
+                        <div style={{display:"flex",alignItems:"baseline",gap:3}}>
+                          <span style={pf({fontSize:24,fontWeight:700,color:sc(s.note)})}>{s.note}</span>
+                          <span style={ss({color:"#4a4a5e",fontSize:12})}>/10</span>
+                        </div>
+                      </div>
+                      <div style={{height:3,background:"#1a1a2a",borderRadius:2,marginBottom:12,overflow:"hidden"}}><div style={{height:"100%",width:(s.note*10)+"%",background:sc(s.note),borderRadius:2}}/></div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                        <div style={{background:"#0a0a0f",borderRadius:8,padding:"10px 12px",borderLeft:"3px solid #4ade80"}}><div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#4ade80",marginBottom:4})}>Point fort</div><div style={ss({fontSize:12,lineHeight:1.5,color:"#b8b4ac"})}>{s.positif}</div></div>
+                        <div style={{background:"#0a0a0f",borderRadius:8,padding:"10px 12px",borderLeft:"3px solid #fb923c"}}><div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#fb923c",marginBottom:4})}>A ameliorer</div><div style={ss({fontSize:12,lineHeight:1.5,color:"#b8b4ac"})}>{s.amelioration}</div></div>
+                      </div>
+                      {s.exemple&&<div style={{marginTop:8,background:"#0a0a0f",borderRadius:8,padding:"8px 12px",borderLeft:"3px solid #2a2a3e"}}><div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#4a4a5e",marginBottom:3})}>Extrait</div><div style={ss({fontSize:12,fontStyle:"italic",color:"#7a7a8e",lineHeight:1.5})}>"{s.exemple}"</div></div>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* TAB: REFORMULATIONS */}
+            {tab==="ref"&&(
+              <div style={{display:"flex",flexDirection:"column",gap:14}}>
+                <div style={ss({fontSize:12,color:"#6b6b7e",lineHeight:1.6})}>Moments cles : ce qui a ete dit vs ce qui aurait du etre dit.</div>
+                {result.reformulations?.map((r,i)=>(
+                  <div key={i} style={{background:"#0f0f1a",border:"1px solid #1a1a2a",borderRadius:12,overflow:"hidden"}}>
+                    <div style={{padding:"10px 16px",background:"#0a0a0f",borderBottom:"1px solid #1a1a2a"}}>
+                      <div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#8b7355"})}>Moment {i+1}</div>
+                      <div style={ss({fontSize:12,color:"#7a7a8e",marginTop:3})}>{r.situation}</div>
+                    </div>
+                    <div style={{padding:"12px 16px",borderBottom:"1px solid #1a1a2a"}}>
+                      <div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#f87171",marginBottom:5})}>Ce qui a ete dit</div>
+                      <div style={ss({fontSize:13,lineHeight:1.6,color:"#9a7a7a",fontStyle:"italic"})}>"{r.dit}"</div>
+                    </div>
+                    <div style={{padding:"12px 16px"}}>
+                      <div style={ss({fontSize:9,textTransform:"uppercase",letterSpacing:2,color:"#4ade80",marginBottom:5})}>Ce qui aurait du etre dit</div>
+                      <div style={ss({fontSize:13,lineHeight:1.6,color:"#a8c4a8",fontStyle:"italic"})}>"{r.aurait_du_dire}"</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* TAB: COACHING */}
+            {tab==="coaching"&&(
+              <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                <Card><SL>Top 3 priorites de coaching</SL>{result.top3_coaching?.map((c2,i)=><div key={i} style={{display:"flex",gap:14,marginBottom:i<2?10:0,paddingBottom:i<2?10:0,borderBottom:i<2?"1px solid #1a1a2a":"none"}}><div style={pf({fontSize:20,fontWeight:900,color:"#8b7355",minWidth:22})}>{i+1}</div><div style={ss({fontSize:13,lineHeight:1.6,color:"#c8c4bc",paddingTop:2})}>{c2}</div></div>)}</Card>
+                {result.prochaine_action&&<Card left="#facc15"><SL c="#facc15">Prochaine action</SL><div style={ss({fontSize:13,lineHeight:1.7,color:"#c8c4bc"})}>{result.prochaine_action}</div></Card>}
+                {result.a_surveiller&&<Card left="#a78bfa"><SL c="#a78bfa">A surveiller</SL><div style={ss({fontSize:13,lineHeight:1.7,color:"#b8b4ac"})}>{result.a_surveiller}</div></Card>}
+                <Card left="#8b7355"><SL c="#8b7355">Message au commercial</SL><div style={pf({fontSize:14,lineHeight:1.8,color:"#e8e4dc",fontStyle:"italic"})}>"{result.verdict}"</div></Card>
+              </div>
+            )}
+
+            {/* TAB: EMAIL */}
+            {tab==="email"&&(
+              <div style={{display:"flex",flexDirection:"column",gap:14}}>
+                <div style={ss({fontSize:12,color:"#6b6b7e"})}>Email de feedback pret a envoyer. Editable avant envoi.</div>
+                {emailLoading&&<div style={{display:"flex",alignItems:"center",gap:12,padding:"20px",background:"#0f0f1a",borderRadius:12,border:"1px solid #1a1a2a"}}><span className="pu" style={{color:"#8b7355"}}>◎</span><div style={ss({fontSize:13,color:"#6b6b7e"})}>Redaction en cours...</div></div>}
+                {!emailLoading&&!emailTxt&&fromHistory&&(
+                  <button onClick={()=>genEmail(result,am)} style={{padding:"9px 22px",background:"#8b7355",border:"none",borderRadius:8,color:"#fff0d8",fontFamily:"system-ui,sans-serif",fontSize:12,fontWeight:600,alignSelf:"flex-start"}}>
+                    Generer l email
+                  </button>
+                )}
+                {!emailLoading&&emailTxt&&(
+                  <>
+                    <textarea value={emailTxt} onChange={e=>setEmailTxt(e.target.value)}
+                      style={{width:"100%",minHeight:280,background:"#0f0f1a",border:"1px solid #2a2a3e",borderRadius:12,padding:"18px 20px",color:"#e8e4dc",fontSize:13,fontFamily:"system-ui,sans-serif",lineHeight:1.8,resize:"vertical"}}/>
+                    <div style={{display:"flex",gap:10}}>
+                      <button onClick={()=>{navigator.clipboard.writeText(emailTxt);setEmailCopied(true);setTimeout(()=>setEmailCopied(false),2000);}}
+                        style={{padding:"9px 22px",background:emailCopied?"#1a2a1a":"#8b7355",border:"none",borderRadius:8,color:emailCopied?"#4ade80":"#fff0d8",fontFamily:"system-ui,sans-serif",fontSize:12,fontWeight:600}}>
+                        {emailCopied?"Copie !":"Copier"}
+                      </button>
+                      <button onClick={()=>genEmail(result,am)} style={{padding:"9px 18px",background:"none",border:"1px solid #2a2a3e",borderRadius:8,color:"#6b6b7e",fontFamily:"system-ui,sans-serif",fontSize:12}}>
+                        Regenerer
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            <button onClick={goHome} style={{marginTop:28,padding:"8px 20px",background:"none",border:"1px solid #1e1e2e",borderRadius:8,color:"#5a5a6e",fontFamily:"system-ui,sans-serif",fontSize:11}}>
+              Analyser un autre call
+            </button>
+          </div>
+        )}
+
+        {/* HISTORIQUE */}
+        {screen==="history"&&(
+          <div className="fi">
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6,flexWrap:"wrap",gap:12}}>
+              <div style={pf({fontSize:24,fontWeight:900})}>Historique <span style={{color:"#8b7355"}}>des analyses</span></div>
+              <div style={{display:"flex",gap:8,flexShrink:0}}>
+                <label style={{padding:"7px 16px",background:"#0a1a0a",border:"1px solid #4ade80",borderRadius:8,color:"#4ade80",fontFamily:"system-ui,sans-serif",fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                  Importer JSON
+                  <input type="file" accept="application/json" style={{display:"none"}} onChange={e=>{
+                    handleImportHistory(e.target.files?.[0]);
+                    e.target.value="";
+                  }}/>
+                </label>
+                {analyses.length>0&&(
+                  <button onClick={exportHistory} style={{padding:"7px 16px",background:"#1a1208",border:"1px solid #8b7355",borderRadius:8,color:"#e8c97a",fontFamily:"system-ui,sans-serif",fontSize:12,fontWeight:600}}>
+                    Exporter JSON
+                  </button>
+                )}
+              </div>
+            </div>
+            {importMsg&&<div style={ss({marginBottom:14,padding:"9px 14px",background:"#0a1a0a",borderRadius:8,color:"#4ade80",fontSize:13,border:"1px solid #1a3a1a"})}>{importMsg}</div>}
+            <p style={ss({color:"#6b6b7e",fontSize:13,marginBottom:24})}>{analyses.length} call{analyses.length>1?"s":""} analyses</p>
+            {analyses.length===0&&<div style={ss({color:"#4a4a5e",fontSize:14})}>Aucune analyse pour l instant. Importe ton historique depuis Claude.ai avec le bouton ci-dessus.</div>}
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              {analyses.map((a)=>{
+                const avg=weightedScore(a.result.scores,a.callType);
+                return (
+                  <div key={a.id} style={{background:"#0f0f1a",border:"1px solid #1a1a2a",borderRadius:12,padding:"14px 18px",display:"flex",alignItems:"center",gap:16,flexWrap:"wrap",cursor:"pointer"}}
+                    onClick={()=>{if(confirmDelete!==a.id){setResult(a.result);setCallType(a.callType);setAm(a.am);setTab("vue");setViewingEntry(a);setFromHistory(true);setScreen("result");setEmailTxt("");}}}
+                  >
+                    <div style={{width:38,height:38,borderRadius:"50%",border:"2px solid "+sc(avg),display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      <span style={pf({fontSize:14,fontWeight:700,color:sc(avg)})}>{avg}</span>
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                        <span style={ss({fontWeight:600,fontSize:14})}>{a.am}</span>
+                        <span style={ss({fontSize:11,padding:"2px 8px",borderRadius:20,background:"#1a1a2a",color:"#6b6b7e"})}>{getCallShortLabel(a.callType)}</span>
+                        <span style={ss({fontSize:11,color:"#5a5a6e"})}>{a.date}</span>
+                      </div>
+                      <div style={ss({fontSize:12,color:"#7a7a8e",marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"})}>{getResultSummary(a.result)?.slice(0,80)}...</div>
+                    </div>
+                    {confirmDelete===a.id?(
+                      <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}} onClick={e=>e.stopPropagation()}>
+                        <span style={ss({fontSize:12,color:"#6b6b7e"})}>Supprimer ?</span>
+                        <button onClick={()=>handleDelete(a.id)} style={{padding:"4px 12px",background:"#1a0808",border:"1px solid #f87171",borderRadius:6,color:"#f87171",fontFamily:"system-ui,sans-serif",fontSize:11}}>Oui</button>
+                        <button onClick={()=>setConfirmDelete(null)} style={{padding:"4px 12px",background:"none",border:"1px solid #2a2a3e",borderRadius:6,color:"#6b6b7e",fontFamily:"system-ui,sans-serif",fontSize:11}}>Non</button>
+                      </div>
+                    ):(
+                      <button onClick={e=>{e.stopPropagation();setConfirmDelete(a.id);}} style={{background:"none",border:"none",color:"#3a3a4e",fontSize:18,flexShrink:0,padding:"2px 8px",lineHeight:1}}>×</button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* PATTERNS */}
+        {screen==="patterns"&&(
+          <div className="fi">
+            <div style={pf({fontSize:24,fontWeight:900,marginBottom:6})}>Patterns <span style={{color:"#8b7355"}}>par AM</span></div>
+            <p style={ss({color:"#6b6b7e",fontSize:13,marginBottom:24})}>Tendances identifiees sur la duree. Minimum 2 calls par AM.</p>
+            {amStats.length===0&&<div style={ss({color:"#4a4a5e",fontSize:14})}>Aucune donnee pour l instant.</div>}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:10,marginBottom:28}}>
+              {amStats.map(stat=>(
+                <button key={stat.name} onClick={()=>{setPatAM(stat.name);setPatData(null);if(stat.count>=2)genPatterns(stat.name);}}
+                  style={{background:patAM===stat.name?"#1a1208":"#0f0f1a",border:"1px solid",borderColor:patAM===stat.name?"#8b7355":"#1a1a2a",borderRadius:12,padding:"14px 16px",textAlign:"left",cursor:"pointer"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                    <span style={ss({fontSize:14,fontWeight:600,color:"#e8e4dc"})}>{stat.name}</span>
+                    <span style={pf({fontSize:16,fontWeight:700,color:sc(stat.avg)})}>{stat.avg}</span>
+                  </div>
+                  <div style={ss({fontSize:11,color:"#6b6b7e"})}>{stat.count} call{stat.count>1?"s":""}</div>
+                  {stat.count<2&&<div style={ss({fontSize:10,color:"#4a4a5e",marginTop:4})}>+1 call pour patterns</div>}
+                </button>
+              ))}
+            </div>
+            {patAM&&(
+              <div>
+                <div style={ss({fontSize:11,color:"#8b7355",textTransform:"uppercase",letterSpacing:2,marginBottom:16})}>{patAM}</div>
+                {patLoading&&<div style={{display:"flex",alignItems:"center",gap:12,padding:"20px",background:"#0f0f1a",borderRadius:12,border:"1px solid #1a1a2a"}}><span className="pu" style={{color:"#8b7355"}}>◎</span><div style={ss({fontSize:13,color:"#6b6b7e"})}>Analyse des patterns en cours...</div></div>}
+                {!patLoading&&patData&&!patData.error&&(
+                  <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                    <Card left="#8b7355"><SL c="#8b7355">Profil global</SL><div style={ss({fontSize:13,lineHeight:1.7,color:"#c8c4bc"})}>{patData.synthese}</div></Card>
+                    {patData.points_forts_recurrents&&<Card left="#4ade80"><SL c="#4ade80">Points forts recurrents</SL>{patData.points_forts_recurrents.map((p,i)=><div key={i} style={{display:"flex",gap:10,marginBottom:i<patData.points_forts_recurrents.length-1?8:0}}><span style={{color:"#4ade80",fontSize:8,marginTop:4}}>●</span><div style={ss({fontSize:13,lineHeight:1.6,color:"#b8b4ac"})}>{p}</div></div>)}</Card>}
+                    {patData.axes_faibles_recurrents&&<Card left="#f87171"><SL c="#f87171">Axes faibles recurrents</SL>{patData.axes_faibles_recurrents.map((p,i)=><div key={i} style={{display:"flex",gap:10,marginBottom:i<patData.axes_faibles_recurrents.length-1?8:0}}><span style={{color:"#f87171",fontSize:8,marginTop:4}}>●</span><div style={ss({fontSize:13,lineHeight:1.6,color:"#b8b4ac"})}>{p}</div></div>)}</Card>}
+                    <Card left="#facc15"><SL c="#facc15">Evolution</SL><div style={ss({fontSize:13,lineHeight:1.7,color:"#c8c4bc"})}>{patData.evolution}</div></Card>
+                    {patData.focus_coaching&&<Card left="#a78bfa"><SL c="#a78bfa">Focus coaching (prochaines semaines)</SL>{patData.focus_coaching.map((p,i)=><div key={i} style={{display:"flex",gap:12,marginBottom:i<patData.focus_coaching.length-1?8:0}}><div style={pf({color:"#a78bfa",fontWeight:700,fontSize:14,minWidth:18})}>{i+1}</div><div style={ss({fontSize:13,lineHeight:1.6,color:"#c8c4bc"})}>{p}</div></div>)}</Card>}
+                    <Card left="#8b7355"><SL c="#8b7355">Message manager</SL><div style={pf({fontSize:14,lineHeight:1.8,color:"#e8e4dc",fontStyle:"italic"})}>"{patData.message_manager}"</div></Card>
+                  </div>
+                )}
+                {!patLoading&&patData?.error&&<div style={ss({color:"#f87171",fontSize:13})}>{patData.error}</div>}
+                {!patLoading&&!patData&&analyses.filter(a=>a.am===patAM).length<2&&(
+                  <div style={ss({color:"#4a4a5e",fontSize:13,padding:"20px",background:"#0f0f1a",borderRadius:12,border:"1px solid #1a1a2a"})}>Minimum 2 calls necessaires pour analyser les patterns de {patAM}.</div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
